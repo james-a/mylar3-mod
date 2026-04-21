@@ -39,6 +39,19 @@ expect those paths to exist; for pure UI review the dummy DB is enough.
 
 Nothing under local-dev-data/ is committed (.gitignore).
 
+Keeping your own config.ini safe
+---------------------------------
+- bootstrap_local_db.py will NOT run if local-dev-data/mylar.db already exists
+  (so it will not call mylar.initialize() again and rewrite your ini).
+- run_local.ps1 only runs bootstrap when mylar.db is missing.
+- Mylar itself still writes config.ini when you change settings in the UI or
+  when it upgrades config_version — that is normal.
+
+Tip: keep a spare copy outside local-dev-data, e.g.
+  copy local-dev-data\config.ini ..\config.ini.nas-backup
+If you ever need a clean slate, delete local-dev-data\mylar.db and
+local-dev-data\config.ini, then run bootstrap again.
+
 Copied config.ini from NAS but still see "Comic Location is not set"?
 --------------------------------------------------------------------
 Mylar reads config from:  <datadir>\config.ini
