@@ -1,0 +1,14 @@
+Files expected to need one-time edits when wiring housekeeping (non-exhaustive):
+
+- data/interfaces/default/manage.html
+  Add link under "Additional Options" next to CBL Import / Import Results, e.g.
+  <a href="housekeeping">Library Housekeeping</a>
+
+- mylar/webserve.py
+  New exposed methods: page + JSON/CSV export + optional "run audit" thread
+
+Optional later:
+- mylar/helpers.py or webstart.py if registering a scheduler job (periodic audit)
+- mylar/api.py if you want cmd=housekeepingAudit for automation
+
+Keep each change small; list new rows here after you edit.
