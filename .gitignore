@@ -27,5 +27,9 @@ __pycache__
 .vscode
 # devcontainer local changes
 .devcontainer/config
+
+# Local dev runs (config + db + logs; not for commit)
+local-dev-data/
+.venv/
 .devcontainer/comics
 .devcontainer/downloads
