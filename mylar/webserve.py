@@ -4422,6 +4422,27 @@ class WebInterface(object):
         return serve_template(templatename="cblimport.html", title="CBL Import")
     cblimport.exposed = True
 
+    def housekeeping(self):
+        return serve_template(
+            templatename="housekeeping.html",
+            title="Library Housekeeping",
+            audit_rows=[],
+        )
+
+    housekeeping.exposed = True
+
+    def housekeepingAudit(self):
+        """Report-only library audit; full logic will live in contrib.mylar_housekeeping."""
+        return json.dumps(
+            {
+                "status": "success",
+                "message": "Audit not yet implemented — placeholder for upcoming checks.",
+                "rows": [],
+            }
+        )
+
+    housekeepingAudit.exposed = True
+
     def flushImports(self):
         myDB = db.DBConnection()
         myDB.action('DELETE from importresults')

@@ -1,0 +1,73 @@
+<%inherit file="base.html" />
+<%!
+	import mylar
+%>
+<%def name="headerIncludes()">
+	<div id="subhead_container">
+		<div id="subhead_menu">
+			<a id="menu_link_edit" href="manage">Manage</a>
+		</div>
+	</div>
+</%def>
+
+<%def name="body()">
+	<input type="hidden" id="page_name" value="housekeeping" />
+	<div id="paddingheader">
+		<h1 class="clearfix">Library Housekeeping</h1>
+	</div>
+	<ul>
+		<li>Compare your library paths and filenames to the active folder/file format settings (report-only in this version).</li>
+		<li>Use <strong>Run audit</strong> to refresh results here once the audit engine is wired in <code>contrib/mylar_housekeeping</code>.</li>
+		<li>Destructive actions (rename, move folders) will stay opt-in when implemented.</li>
+	</ul>
+	<br/>
+	<hr/>
+	<div class="configtable" style="width:960px;">
+		<fieldset>
+			<legend>Control</legend>
+			<p>
+				<input id="housekeeping_run_audit" type="button" value="Run audit"
+					onclick="doAjaxCall('housekeepingAudit', $(this), 'table');"
+					data-success="Audit response received — see logs when implemented."
+					data-error="Audit request failed. Check logs." />
+			</p>
+		</fieldset>
+	</div>
+	<br/>
+	<div class="table_wrapper">
+		<table class="display" id="housekeeping_table">
+			<thead>
+				<tr>
+					<th id="hk_series">Series</th>
+					<th id="hk_year">Year</th>
+					<th id="hk_comicid">ComicID</th>
+					<th id="hk_issue">Issue</th>
+					<th id="hk_kind">Kind</th>
+					<th id="hk_detail">Detail</th>
+				</tr>
+			</thead>
+			<tbody>
+				%if audit_rows:
+					%for row in audit_rows:
+						<tr>
+							<td>${row.get('series', '')}</td>
+							<td>${row.get('year', '')}</td>
+							<td>${row.get('comicid', '')}</td>
+							<td>${row.get('issue', '')}</td>
+							<td>${row.get('kind', '')}</td>
+							<td>${row.get('detail', '')}</td>
+						</tr>
+					%endfor
+				%else:
+					<tr>
+						<td colspan="6">No audit results yet — run an audit after implementation, or see Mylar logs.</td>
+					</tr>
+				%endif
+			</tbody>
+		</table>
+	</div>
+</%def>
+
+<%def name="headIncludes()">
+	<link rel="stylesheet" href="interfaces/${interface}/css/data_table.css">
+</%def>

@@ -1,14 +1,13 @@
-Files expected to need one-time edits when wiring housekeeping (non-exhaustive):
+Fork-only housekeeping wiring (non-exhaustive):
 
-- data/interfaces/default/manage.html
-  Add link under "Additional Options" next to CBL Import / Import Results, e.g.
-  <a href="housekeeping">Library Housekeeping</a>
-
-- mylar/webserve.py
-  New exposed methods: page + JSON/CSV export + optional "run audit" thread
+Done (UI shell):
+- data/interfaces/default/manage.html — link "Library Housekeeping" → housekeeping
+- data/interfaces/default/housekeeping.html — page template (table + Run audit)
+- mylar/webserve.py — housekeeping(), housekeepingAudit() stub JSON
 
 Optional later:
-- mylar/helpers.py or webstart.py if registering a scheduler job (periodic audit)
-- mylar/api.py if you want cmd=housekeepingAudit for automation
+- contrib/mylar_housekeeping/ — audit logic; call from housekeepingAudit + pass rows into template
+- mylar/api.py — cmd=housekeepingAudit for automation
+- Scheduler / Activity tab if periodic runs are desired
 
-Keep each change small; list new rows here after you edit.
+Keep each change small; append new rows when you touch more files.
