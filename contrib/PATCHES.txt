@@ -5,6 +5,13 @@ Done (UI shell):
 - data/interfaces/default/housekeeping.html — page template (table + Run audit)
 - mylar/webserve.py — housekeeping(), housekeepingAudit() stub JSON
 
+Dev (local UI review, not required for NAS):
+- devtools/bootstrap_local_db.py — create local-dev-data config + DB without web UI
+- devtools/seed_dummy_series.py — optional dummy series/issue
+- devtools/run_local.ps1 — venv + bootstrap + start on port 8090
+- devtools/LOCAL_DEV.txt — step-by-step
+- .gitignore — local-dev-data/, .venv/
+
 Optional later:
 - contrib/mylar_housekeeping/ — audit logic; call from housekeepingAudit + pass rows into template
 - mylar/api.py — cmd=housekeepingAudit for automation
