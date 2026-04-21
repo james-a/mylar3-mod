@@ -1,20 +1,18 @@
 Fork-only housekeeping wiring (non-exhaustive):
 
-Done (UI shell):
+Core:
 - data/interfaces/default/manage.html — link "Library Housekeeping" → housekeeping
-- data/interfaces/default/housekeeping.html — page template (table + Run audit)
-- mylar/webserve.py — housekeeping(), housekeepingAudit() stub JSON
+- data/interfaces/default/housekeeping.html — audit table + Run audit (JSON + JS)
+- mylar/webserve.py — housekeeping(), housekeepingAudit() → contrib audit
+- contrib/mylar_housekeeping/audit.py — run_library_audit() all series + issues + annuals
+- mylar/filers.py — Windows folder_format: use .replace for / → \\ (fixes re.sub + Py3.13+)
 
-Dev (local UI review, not required for NAS):
-- devtools/bootstrap_local_db.py — create local-dev-data config + DB without web UI
-- devtools/seed_dummy_series.py — optional dummy series/issue
-- devtools/run_local.ps1 — venv + bootstrap + start on port 8090
-- devtools/LOCAL_DEV.txt — step-by-step
+Dev (local UI review):
+- devtools/bootstrap_local_db.py, seed_dummy_series.py, run_local.ps1, LOCAL_DEV.txt
 - .gitignore — local-dev-data/, .venv/
 
 Optional later:
-- contrib/mylar_housekeeping/ — audit logic; call from housekeepingAudit + pass rows into template
-- mylar/api.py — cmd=housekeepingAudit for automation
-- Scheduler / Activity tab if periodic runs are desired
+- mylar/api.py — cmd=housekeepingAudit
+- Scheduler for periodic audits
 
 Keep each change small; append new rows when you touch more files.

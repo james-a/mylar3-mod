@@ -16,9 +16,9 @@
 		<h1 class="clearfix">Library Housekeeping</h1>
 	</div>
 	<ul>
-		<li>Compare your library paths and filenames to the active folder/file format settings (report-only in this version).</li>
-		<li>Use <strong>Run audit</strong> to refresh results here once the audit engine is wired in <code>contrib/mylar_housekeeping</code>.</li>
-		<li>Destructive actions (rename, move folders) will stay opt-in when implemented.</li>
+		<li>Compare your library paths and filenames to the active folder/file format settings (report-only).</li>
+		<li><strong>Run audit</strong> scans <strong>all series</strong> and their issues (and annuals when enabled). This may take a while on large libraries.</li>
+		<li>Destructive actions (rename, move folders) are not performed from this page.</li>
 	</ul>
 	<br/>
 	<hr/>
@@ -27,9 +27,8 @@
 			<legend>Control</legend>
 			<p>
 				<input id="housekeeping_run_audit" type="button" value="Run audit"
-					onclick="doAjaxCall('housekeepingAudit', $(this), 'table');"
-					data-success="Audit response received — see logs when implemented."
-					data-error="Audit request failed. Check logs." />
+					onclick="housekeepingRunAudit();" />
+				<span id="housekeeping_status" style="margin-left:12px;"></span>
 			</p>
 		</fieldset>
 	</div>
@@ -59,8 +58,8 @@
 						</tr>
 					%endfor
 				%else:
-					<tr>
-						<td colspan="6">No audit results yet — run an audit after implementation, or see Mylar logs.</td>
+					<tr id="housekeeping_placeholder_row">
+						<td colspan="6">No audit results yet — click <strong>Run audit</strong>.</td>
 					</tr>
 				%endif
 			</tbody>
@@ -70,4 +69,64 @@
 
 <%def name="headIncludes()">
 	<link rel="stylesheet" href="interfaces/${interface}/css/data_table.css">
+	<style type="text/css">
+		tr.hk-warn td { background-color: #4a2c2c !important; }
+		tr.hk-ok td { opacity: 0.85; }
+	</style>
+</%def>
+
+<%def name="javascriptIncludes()">
+	<script type="text/javascript">
+	function housekeepingRunAudit() {
+		var feedback = $("#ajaxMsg");
+		feedback.fadeIn();
+		var loader = $("<img src='images/loader_black.gif' alt='loading' class='loader'/>");
+		feedback.prepend(loader);
+		$("#housekeeping_status").text("Running audit…");
+		$.ajax({
+			url: "housekeepingAudit",
+			type: "GET",
+			dataType: "json",
+			success: function(resp) {
+				loader.remove();
+				feedback.fadeOut();
+				if (resp.status !== "success") {
+					$("#housekeeping_status").text(resp.message || "Audit failed");
+					return;
+				}
+				$("#housekeeping_status").text(resp.message || "");
+				var tbody = $("#housekeeping_table tbody");
+				tbody.empty();
+				var rows = resp.rows || [];
+				if (rows.length === 0) {
+					tbody.append("<tr><td colspan='6'>No rows returned.</td></tr>");
+					return;
+				}
+				for (var i = 0; i < rows.length; i++) {
+					var r = rows[i];
+					var k = r.kind || "";
+					var trClass = "";
+					if (k.indexOf("mismatch") >= 0 || k.indexOf("_error") >= 0 || k.indexOf("missing") >= 0 || k.indexOf("no_location") >= 0 || k === "config_error" || k === "empty_library") {
+						trClass = "hk-warn";
+					} else if (k.indexOf("match") >= 0) {
+						trClass = "hk-ok";
+					}
+					var tr = $("<tr></tr>").addClass(trClass);
+					tr.append($("<td></td>").text(r.series || ""));
+					tr.append($("<td></td>").text(r.year || ""));
+					tr.append($("<td></td>").text(r.comicid || ""));
+					tr.append($("<td></td>").text(r.issue || ""));
+					tr.append($("<td></td>").text(k));
+					tr.append($("<td></td>").text(r.detail || ""));
+					tbody.append(tr);
+				}
+			},
+			error: function(xhr, status, err) {
+				loader.remove();
+				feedback.fadeOut();
+				$("#housekeeping_status").text("Request failed: " + (err || status));
+			}
+		});
+	}
+	</script>
 </%def>

@@ -4432,14 +4432,34 @@ class WebInterface(object):
     housekeeping.exposed = True
 
     def housekeepingAudit(self):
-        """Report-only library audit; full logic will live in contrib.mylar_housekeeping."""
-        return json.dumps(
-            {
-                "status": "success",
-                "message": "Audit not yet implemented — placeholder for upcoming checks.",
-                "rows": [],
-            }
-        )
+        """Report-only library audit (contrib.mylar_housekeeping.audit)."""
+        try:
+            import sys
+
+            _contrib = os.path.join(mylar.PROG_DIR, "contrib")
+            if _contrib not in sys.path:
+                sys.path.insert(0, _contrib)
+            from mylar_housekeeping.audit import run_library_audit
+
+            rows = run_library_audit()
+            attention = 0
+            for r in rows:
+                k = r.get("kind", "")
+                if k in ("folder_match", "file_match"):
+                    continue
+                attention += 1
+            return json.dumps(
+                {
+                    "status": "success",
+                    "message": "Audit complete: %s row(s), %s not matching / needing review."
+                    % (len(rows), attention),
+                    "rows": rows,
+                }
+            )
+        except Exception as e:
+            logger.error("[HOUSEKEEPING] Audit failed: %s", e)
+            logger.exception("[HOUSEKEEPING]")
+            return json.dumps({"status": "failure", "message": str(e), "rows": []})
 
     housekeepingAudit.exposed = True
 
