@@ -38,3 +38,40 @@ Copy mylar.db (+ config.ini if you want same settings) into local-dev-data/
 expect those paths to exist; for pure UI review the dummy DB is enough.
 
 Nothing under local-dev-data/ is committed (.gitignore).
+
+Copied config.ini from NAS but still see "Comic Location is not set"?
+--------------------------------------------------------------------
+Mylar reads config from:  <datadir>\config.ini
+When you use:  --datadir=local-dev-data
+that file MUST be:  mylar3-src\local-dev-data\config.ini
+
+The startup check uses [General] destination_dir (Comic Location). If that
+key is missing, empty, or only whitespace, you get "not set" — even if you
+thought you copied the file. Confirm the file you edited is the one under
+local-dev-data (open it in an editor and search for "destination_dir").
+
+For a Windows PC, set Comic Location to a folder that EXISTS on this
+machine, for example create:
+
+   local-dev-data\comics
+
+and in config.ini under [General]:
+
+   destination_dir = C:\Users\<you>\...\mylar3-src\local-dev-data\comics
+
+(use your real absolute path). NAS paths like /volume1/... or Docker /comics
+are valid on the NAS but not as a real folder on Windows unless you map a
+drive to match.
+
+If destination_dir points to a path that does not exist, the message is
+different ("cannot be accessed"), not "not set".
+
+"Could not find a valid unrar executable"
+------------------------------------------
+On Windows, install WinRAR (or place UnRAR.exe somewhere), OR set in
+config.ini under [Metatagging]:
+
+   unrar_cmd = C:\Program Files\WinRAR\UnRAR.exe
+
+(adjust if your install path differs). Mylar also checks Rar.exe in
+Program Files\WinRAR when unrar_cmd is blank.

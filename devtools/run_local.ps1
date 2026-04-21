@@ -7,6 +7,10 @@ if (-not (Test-Path .venv\Scripts\python.exe)) {
     python -m venv .venv
     .\.venv\Scripts\pip install -r requirements.txt
 }
+# Folder you can set as Comic Location (destination_dir) when testing on Windows
+$comics = Join-Path (Get-Location) "local-dev-data\comics"
+if (-not (Test-Path $comics)) { New-Item -ItemType Directory -Path $comics -Force | Out-Null }
+
 if (-not (Test-Path local-dev-data\mylar.db)) {
     Write-Host "Bootstrapping local-dev-data database..."
     .\.venv\Scripts\python.exe devtools\bootstrap_local_db.py
