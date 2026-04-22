@@ -23,13 +23,14 @@ env/
 # Testing outputs, caches, etc.
 __pycache__
 .coverage
-# Local VS code config files
-.vscode
-# devcontainer local changes
+# Shared VS Code / Cursor: launch, tasks, extensions are in-repo.
+# devcontainer local config volumes (if used)
 .devcontainer/config
 
 # Local dev runs (config + db + logs; not for commit)
 local-dev-data/
+# Snapshot of mylar.db + library for dev rollback (devtools/save_dev_baseline.py)
+dev-baseline/
 .venv/
 .devcontainer/comics
 .devcontainer/downloads

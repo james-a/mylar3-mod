@@ -27,6 +27,7 @@
                         <input type="hidden" name="meta_enabled" id="meta_enabled" value=${mylar.CONFIG.ENABLE_META} />
                         <input type="hidden" name="meta_cbr2cbz" id="meta_cbr2cbz" value=${mylar.CONFIG.CBR2CBZ_ONLY} />
                         <input type="hidden" name="rename_enabled" id="rename_enabled" value=${mylar.CONFIG.RENAME_FILES} />
+                        <a id="menu_link_refresh" title="Move the series folder on disk to match the folder format (and update ComicLocation)" onclick="comic_rename_folder(${comic['ComicID']})" href="#">Rename Folder</a>
                         %if mylar.CONFIG.RENAME_FILES:
                             <a id="menu_link_refresh" tile="rename all files in a Downloaded status as per the folder format string" onclick="manual_rename(${comic['ComicID']})" href="#">Rename Files</a>
                         %endif
@@ -1028,6 +1029,31 @@
               })).done(function(data) {
                   //reload_tabs();
                   //reload_table();
+              });
+        }
+
+        function comic_rename_folder(comicid){
+              $('#ajaxMsg').removeClass('error');
+              $('#ajaxMsg').html("<div class='msg'><span class='ui-icon ui-icon-check'></span>Aligning series folder...</div>");
+              $('#ajaxMsg').addClass('success').fadeIn();
+              $.ajax({
+                 type: "GET",
+                 url: "comicRenameFolder",
+                 data: { ComicID: comicid },
+                 success: function(response) {
+                    var obj = typeof response === 'string' ? JSON.parse(response) : response;
+                    if (obj['status'] === 'success'){
+                        $('#ajaxMsg').html("<div class='msg'><span class='ui-icon ui-icon-check'></span>" + (obj['message'] || 'Folder updated.') + "</div>");
+                        $('#ajaxMsg').removeClass('error').addClass('success').fadeIn().delay(4000).fadeOut();
+                    } else {
+                        $('#ajaxMsg').html("<div class='msg'><span class='ui-icon ui-icon-alert'></span>" + (obj['message'] || 'Could not move folder.') + "</div>");
+                        $('#ajaxMsg').removeClass('success').addClass('error').fadeIn().delay(5000).fadeOut();
+                    }
+                 },
+                 error: function(xhr) {
+                    $('#ajaxMsg').html("<div class='msg'><span class='ui-icon ui-icon-alert'></span>Request failed.</div>");
+                    $('#ajaxMsg').removeClass('success').addClass('error').fadeIn().delay(5000).fadeOut();
+                 },
               });
         }
 

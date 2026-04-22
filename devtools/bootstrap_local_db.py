@@ -40,3 +40,7 @@ mylar.initialize(mylar.CONFIG_FILE)
 print("[bootstrap_local_db] OK — config and DB initialized.")
 print("  Config:", mylar.CONFIG_FILE)
 print("  Database:", mylar.DB_FILE)
+print(
+    "  Full local library (CV import + dummy .cbz + rescan): "
+    "python devtools/setup_local_dev_library.py"
+)

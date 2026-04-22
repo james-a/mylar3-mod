@@ -4442,17 +4442,22 @@ class WebInterface(object):
             from mylar_housekeeping.audit import run_library_audit
 
             rows = run_library_audit()
-            attention = 0
-            for r in rows:
-                k = r.get("kind", "")
-                if k in ("folder_match", "file_match"):
-                    continue
-                attention += 1
+            from mylar_housekeeping.audit import sanitize_rows_for_json
+
+            rows = sanitize_rows_for_json(rows)
+            if not rows:
+                msg = "Audit complete: no data."
+            elif len(rows) == 1 and rows[0].get("kind") in (
+                "config_error",
+                "empty_library",
+            ):
+                msg = rows[0].get("results_line") or rows[0].get("summary") or "Audit could not complete."
+            else:
+                msg = "Audit complete: %s series." % len(rows)
             return json.dumps(
                 {
                     "status": "success",
-                    "message": "Audit complete: %s row(s), %s not matching / needing review."
-                    % (len(rows), attention),
+                    "message": msg,
                     "rows": rows,
                 }
             )
@@ -4462,6 +4467,132 @@ class WebInterface(object):
             return json.dumps({"status": "failure", "message": str(e), "rows": []})
 
     housekeepingAudit.exposed = True
+
+    def housekeepingSeriesRefresh(self, ComicID=None):
+        """
+        Series housekeeping in one background thread: align series folder on disk
+        to folder_format (move + ComicLocation update), Comic Vine dbUpdate,
+        manualRename for issue files, then group_metatag + rescan.
+        """
+        if not ComicID or str(ComicID).strip() in ("", "None"):
+            return json.dumps({"status": "failure", "message": "ComicID required."})
+        comic_id = str(ComicID).strip()
+        myDB = db.DBConnection()
+        row = myDB.selectone(
+            "SELECT ComicID, ComicName, ComicYear FROM comics WHERE ComicID=?",
+            [comic_id],
+        ).fetchone()
+        if not row:
+            return json.dumps({"status": "failure", "message": "Series not found."})
+
+        cname = row["ComicName"]
+        cyear = row["ComicYear"]
+
+        def _worker():
+            from mylar import updater
+
+            import sys
+
+            _contrib = os.path.join(mylar.PROG_DIR, "contrib")
+            if _contrib not in sys.path:
+                sys.path.insert(0, _contrib)
+            from mylar_housekeeping.folder_align import (
+                align_series_folder_to_format,
+            )
+
+            try:
+                _ok, _msg = align_series_folder_to_format(comic_id)
+                logger.info(
+                    "[HOUSEKEEPING][REFRESH] Folder align for %s: %s (%s)",
+                    comic_id,
+                    _ok,
+                    _msg,
+                )
+            except Exception:
+                logger.exception(
+                    "[HOUSEKEEPING][REFRESH] folder_align failed for %s", comic_id
+                )
+            try:
+                logger.info(
+                    "[HOUSEKEEPING][REFRESH] Comic Vine refresh for %s (%s)",
+                    cname,
+                    comic_id,
+                )
+                updater.dbUpdate([comic_id], calledfrom="housekeeping")
+            except Exception as e:
+                logger.warning(
+                    "[HOUSEKEEPING][REFRESH] dbUpdate failed for %s "
+                    "(Comic Vine unavailable, invalid ComicID, or API error): %s",
+                    comic_id,
+                    e,
+                )
+            try:
+                logger.info(
+                    "[HOUSEKEEPING][REFRESH] Manual rename for %s", comic_id
+                )
+                self.manualRename(comicid=comic_id)
+            except Exception:
+                logger.exception(
+                    "[HOUSEKEEPING][REFRESH] manualRename failed for %s", comic_id
+                )
+            try:
+                logger.info(
+                    "[HOUSEKEEPING][REFRESH] Series metatag for %s", comic_id
+                )
+                self.group_metatag(ComicID=comic_id, threaded=True)
+            except Exception:
+                logger.exception(
+                    "[HOUSEKEEPING][REFRESH] group_metatag failed for %s", comic_id
+                )
+
+        threading.Thread(
+            target=_worker,
+            name="housekeeping_refresh_%s" % str(comic_id)[:24],
+        ).start()
+        return json.dumps(
+            {
+                "status": "success",
+                "message": (
+                    "Refresh started for %s (%s). Background: CV update, align series "
+                    "folder if needed, rename files, metatag, rescan."
+                    % (cname, cyear)
+                ),
+            }
+        )
+
+    housekeepingSeriesRefresh.exposed = True
+
+    def comicRenameFolder(self, ComicID=None):
+        """Move the series directory to match folder_format and update ComicLocation (folder_align)."""
+        if not ComicID or str(ComicID).strip() in ("", "None"):
+            return json.dumps({"status": "failure", "message": "ComicID required."})
+        comic_id = str(ComicID).strip()
+        myDB = db.DBConnection()
+        row = myDB.selectone("SELECT ComicID FROM comics WHERE ComicID=?", [comic_id]).fetchone()
+        if not row:
+            return json.dumps({"status": "failure", "message": "Series not found."})
+        import sys
+
+        _contrib = os.path.join(mylar.PROG_DIR, "contrib")
+        if _contrib not in sys.path:
+            sys.path.insert(0, _contrib)
+        from mylar_housekeeping.folder_align import align_series_folder_to_format
+
+        try:
+            ok, msg = align_series_folder_to_format(comic_id)
+        except Exception as e:
+            logger.exception("[COMIC] comicRenameFolder failed for %s", comic_id)
+            return json.dumps({"status": "failure", "message": str(e)})
+        if ok:
+            return json.dumps(
+                {
+                    "status": "success",
+                    "message": msg or "done",
+                }
+            )
+        return json.dumps({"status": "failure", "message": msg or "Could not move folder."})
+
+    comicRenameFolder.exposed = True
 
     def flushImports(self):
         myDB = db.DBConnection()

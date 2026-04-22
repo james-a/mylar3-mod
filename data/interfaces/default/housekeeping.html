@@ -1,14 +1,21 @@
 <%inherit file="base.html" />
 <%!
 	import mylar
+	def _hk_percent(row):
+		p = row.get("percent", 0)
+		if p == "?" or p is None:
+			return 0
+		try:
+			return int(float(p))
+		except (TypeError, ValueError):
+			return 0
+	def _hk_pcss(p):
+		if p == 101:
+			return "progress-container warning"
+		if p >= 100:
+			return "progress-container complete"
+		return "progress-container missing"
 %>
-<%def name="headerIncludes()">
-	<div id="subhead_container">
-		<div id="subhead_menu">
-			<a id="menu_link_edit" href="manage">Manage</a>
-		</div>
-	</div>
-</%def>
 
 <%def name="body()">
 	<input type="hidden" id="page_name" value="housekeeping" />
@@ -16,13 +23,12 @@
 		<h1 class="clearfix">Library Housekeeping</h1>
 	</div>
 	<ul>
-		<li>Compare your library paths and filenames to the active folder/file format settings (report-only).</li>
-		<li><strong>Run audit</strong> scans <strong>all series</strong> and their issues (and annuals when enabled). This may take a while on large libraries.</li>
-		<li>Destructive actions (rename, move folders) are not performed from this page.</li>
+		<li><strong>Audit</strong> lists every series like <strong>Manage comics</strong> and shows <strong>Results</strong> for three checks: series folder vs folder format, issue files (CBZ + file format; Archived fails; Skipped/Wanted/Snatched/Ignored ignored), and directory metadata sidecars when those options are enabled.</li>
+		<li>Use <strong>Run audit</strong> to load or refresh this table. Per-series actions such as <strong>Refresh Comic</strong>, <strong>Rename Folder</strong>, <strong>Rename Files</strong>, and <strong>Recheck files</strong> are on each comic&rsquo;s detail page.</li>
 	</ul>
 	<br/>
 	<hr/>
-	<div class="configtable" style="width:960px;">
+	<div class="configtable" style="width:100%;max-width:1400px;">
 		<fieldset>
 			<legend>Control</legend>
 			<p>
@@ -37,29 +43,82 @@
 		<table class="display" id="housekeeping_table">
 			<thead>
 				<tr>
-					<th id="hk_series">Series</th>
-					<th id="hk_year">Year</th>
-					<th id="hk_comicid">ComicID</th>
-					<th id="hk_issue">Issue</th>
-					<th id="hk_kind">Kind</th>
-					<th id="hk_detail">Detail</th>
+					<th id="hk_art"></th>
+					<th id="hk_name">Comic Name</th>
+					<th id="hk_status">Status</th>
+					<th id="hk_stat_icon"></th>
+					<th id="hk_latest">Latest Issue</th>
+					<th id="hk_pub">Publisher</th>
+					<th id="hk_have">Have</th>
+					<th id="hk_updated">Updated</th>
+					<th id="hk_results">Results</th>
 				</tr>
 			</thead>
 			<tbody>
 				%if audit_rows:
 					%for row in audit_rows:
-						<tr>
-							<td>${row.get('series', '')}</td>
-							<td>${row.get('year', '')}</td>
-							<td>${row.get('comicid', '')}</td>
-							<td>${row.get('issue', '')}</td>
-							<td>${row.get('kind', '')}</td>
-							<td>${row.get('detail', '')}</td>
+						<%
+							rk = row.get('kind', '')
+							pn = _hk_percent(row)
+							pcss = _hk_pcss(pn)
+						%>
+						<tr class="hk-${row.get('row_class', 'files')}">
+							<td id="albumart"><div><img src="${row.get('ComicImage', 'cache/placeholder.jpg')}" height="75" width="50" alt="" /></div></td>
+							<td id="name">
+%if row.get('comicid') is not None and str(row.get('comicid', '')).strip() not in ('', '—', 'None'):
+								<a href="comicDetails?ComicID=${row['comicid']}">${row.get('comic_name_link', row.get('series', ''))}</a>
+%else:
+								${row.get('series', '')}
+%endif
+							</td>
+							<td id="status">${row.get('recentstatus', row.get('status', ''))}</td>
+							<td id="stat_icon">
+%if str(row.get('status', '')) == 'Paused':
+								<img src="images/pause-icon.png" title="Paused" alt="Paused" width="16" height="16" />
+%elif str(row.get('status', '')) == 'Loading':
+								<img src="images/hourglass.png" title="Loading" alt="Loading" width="16" height="16" />
+%elif str(row.get('status', '')) == 'Error':
+								<img src="images/cross.png" title="Error" alt="Error" width="16" height="16" />
+%else:
+								<img src="images/checkmark.png" title="Active" alt="Active" width="16" height="16" />
+%endif
+							</td>
+							<td id="latest">${row.get('latest_display', '—')}</td>
+							<td id="publisher">${row.get('publisher', '')}</td>
+							<td id="have" valign="center" data-order="${pn}"><span title="${pn}"></span><div class="${pcss}"><div style="width:${pn}%"><span class="progressbar-front-text">${row.get('have_display') or (str(row.get('haveissues', 0)) + '/' + str(row.get('totalissues', 0)))}</span></div></div></td>
+							<td id="lastupdated">${row.get('DateAdded', '—')}</td>
+%if rk in ('config_error', 'empty_library', 'series_error'):
+							<td class="hk-results">${row.get('results_line', '')|h}</td>
+%else:
+							<td class="hk-results hk-results-icons">
+								<div class="hk-audit-line"><span>Series folder:</span>
+%if (row.get('result_series_folder') or '').strip() == 'Pass':
+									<img src="images/checkmark.png" class="hk-audit-ico" width="16" height="16" alt="" title="Pass" />
+%else:
+									<img src="images/cross.png" class="hk-audit-ico" width="16" height="16" alt="" title="Fail" />
+%endif
+								</div>
+								<div class="hk-audit-line"><span>Issue files:</span>
+%if (row.get('result_issue_files') or '').strip() == 'Pass':
+									<img src="images/checkmark.png" class="hk-audit-ico" width="16" height="16" alt="" title="Pass" />
+%else:
+									<img src="images/cross.png" class="hk-audit-ico" width="16" height="16" alt="" title="Fail" />
+%endif
+								</div>
+								<div class="hk-audit-line"><span>Metadata:</span>
+%if (row.get('result_metadata') or '').strip() == 'Pass':
+									<img src="images/checkmark.png" class="hk-audit-ico" width="16" height="16" alt="" title="Pass" />
+%else:
+									<img src="images/cross.png" class="hk-audit-ico" width="16" height="16" alt="" title="Fail" />
+%endif
+								</div>
+							</td>
+%endif
 						</tr>
 					%endfor
 				%else:
 					<tr id="housekeeping_placeholder_row">
-						<td colspan="6">No audit results yet — click <strong>Run audit</strong>.</td>
+						<td colspan="9">No audit results yet — click <strong>Run audit</strong>.</td>
 					</tr>
 				%endif
 			</tbody>
@@ -70,13 +129,118 @@
 <%def name="headIncludes()">
 	<link rel="stylesheet" href="interfaces/${interface}/css/data_table.css">
 	<style type="text/css">
-		tr.hk-warn td { background-color: #4a2c2c !important; }
-		tr.hk-ok td { opacity: 0.85; }
+		tr.hk-files td { background-color: #4a2c2c !important; }
+		tr.hk-stale td, tr.hk-ok td { background-color: #2c3530 !important; }
+		tr.hk-config td { background-color: #3a3a3a !important; }
+		#housekeeping_table td#have { min-width: 100px; }
+		#housekeeping_table .hk-audit-line { display: flex; align-items: center; gap: 6px; margin: 2px 0; font-size: 12px; }
+		#housekeeping_table .hk-audit-line span:first-child { min-width: 7.5em; color: #ccc; }
+		#housekeeping_table .hk-results-icons .hk-audit-ico { flex-shrink: 0; }
 	</style>
 </%def>
 
 <%def name="javascriptIncludes()">
 	<script type="text/javascript">
+	function hkStr(r, k) {
+		var v = r[k];
+		if (v === undefined || v === null) return "";
+		return String(v);
+	}
+	function hkPercent(r) {
+		var p = r.percent;
+		if (p === "?" || p === null || p === undefined || p === "") return 0;
+		var n = parseFloat(p);
+		if (isNaN(n)) return 0;
+		return Math.round(n);
+	}
+	function hkPcss(p) {
+		if (p === 101) return "progress-container warning";
+		if (p >= 100) return "progress-container complete";
+		return "progress-container missing";
+	}
+	function hkResultCell(r) {
+		var k = r.kind || "";
+		if (k === "config_error" || k === "empty_library" || k === "series_error") {
+			return $("<td class='hk-results'></td>").text(hkStr(r, "results_line"));
+		}
+		var pass = "Pass";
+		function ico(passed) {
+			var img = $("<img/>").addClass("hk-audit-ico").attr("width", 16).attr("height", 16);
+			if ((passed || "").toString().trim() === pass) {
+				img.attr("src", "images/checkmark.png").attr("title", "Pass");
+			} else {
+				img.attr("src", "images/cross.png").attr("title", "Fail");
+			}
+			return img;
+		}
+		var td = $("<td class='hk-results hk-results-icons'></td>");
+		var l1 = $("<div class='hk-audit-line'></div>");
+		l1.append($("<span></span>").text("Series folder:"));
+		l1.append(ico(r.result_series_folder));
+		var l2 = $("<div class='hk-audit-line'></div>");
+		l2.append($("<span></span>").text("Issue files:"));
+		l2.append(ico(r.result_issue_files));
+		var l3 = $("<div class='hk-audit-line'></div>");
+		l3.append($("<span></span>").text("Metadata:"));
+		l3.append(ico(r.result_metadata));
+		td.append(l1, l2, l3);
+		return td;
+	}
+	function housekeepingHaveCell(r) {
+		var pn = hkPercent(r);
+		var pcss = hkPcss(pn);
+		var have = hkStr(r, "have_display");
+		if (!have) {
+			have = hkStr(r, "haveissues") + "/" + hkStr(r, "totalissues");
+		}
+		var td = $("<td id='have' valign='center'></td>").attr("data-order", pn);
+		td.append($("<span></span>").attr("title", String(pn)));
+		/* Match home (index.html) / progressbar-front-text — not managecomics double-div + .havetracks */
+		var wrap = $("<div></div>").addClass(pcss);
+		var inner = $("<div></div>").attr("style", "width:" + pn + "%");
+		inner.append($("<span class='progressbar-front-text'></span>").text(have));
+		wrap.append(inner);
+		td.append(wrap);
+		return td;
+	}
+	function housekeepingAppendRow(tbody, r) {
+		var rc = r.row_class || "files";
+		var tr = $("<tr></tr>").addClass("hk-" + rc);
+		var cid = r.comicid;
+		var cidStr = cid != null ? String(cid).trim() : "";
+		var imgSrc = r.ComicImage || ("cache/" + cidStr + ".jpg");
+		var art = $("<td id='albumart'></td>").append(
+			$("<div></div>").append($("<img/>").attr("src", imgSrc).attr("height", 75).attr("width", 50).attr("alt", ""))
+		);
+		tr.append(art);
+		var nameTd = $("<td id='name'></td>");
+		var dispName = r.comic_name_link || r.series || "";
+		if (cidStr !== "" && cidStr !== "—" && cidStr !== "None") {
+			nameTd.append($("<a></a>").attr("href", "comicDetails?ComicID=" + encodeURIComponent(cidStr)).text(dispName));
+		} else {
+			nameTd.text(hkStr(r, "series"));
+		}
+		tr.append(nameTd);
+		tr.append($("<td id='status'></td>").text(hkStr(r, "recentstatus") || hkStr(r, "status")));
+		var st = hkStr(r, "status");
+		var statTd = $("<td id='stat_icon'></td>");
+		if (st === "Paused") {
+			statTd.append($("<img/>").attr("src", "images/pause-icon.png").attr("title", "Paused").attr("alt", "Paused").attr("width", "16").attr("height", "16"));
+		} else if (st === "Loading") {
+			statTd.append($("<img/>").attr("src", "images/hourglass.png").attr("title", "Loading").attr("alt", "Loading").attr("width", "16").attr("height", "16"));
+		} else if (st === "Error") {
+			statTd.append($("<img/>").attr("src", "images/cross.png").attr("title", "Error").attr("alt", "Error").attr("width", "16").attr("height", "16"));
+		} else {
+			statTd.append($("<img/>").attr("src", "images/checkmark.png").attr("title", "Active").attr("alt", "Active").attr("width", "16").attr("height", "16"));
+		}
+		tr.append(statTd);
+		tr.append($("<td id='latest'></td>").text(hkStr(r, "latest_display")));
+		tr.append($("<td id='publisher'></td>").text(hkStr(r, "publisher")));
+		tr.append(housekeepingHaveCell(r));
+		tr.append($("<td id='lastupdated'></td>").text(hkStr(r, "DateAdded")));
+		tr.append(hkResultCell(r));
+		tbody.append(tr);
+	}
 	function housekeepingRunAudit() {
 		var feedback = $("#ajaxMsg");
 		feedback.fadeIn();
@@ -99,26 +263,11 @@
 				tbody.empty();
 				var rows = resp.rows || [];
 				if (rows.length === 0) {
-					tbody.append("<tr><td colspan='6'>No rows returned.</td></tr>");
+					tbody.append("<tr class='hk-stale'><td colspan='9'>No data returned.</td></tr>");
 					return;
 				}
 				for (var i = 0; i < rows.length; i++) {
-					var r = rows[i];
-					var k = r.kind || "";
-					var trClass = "";
-					if (k.indexOf("mismatch") >= 0 || k.indexOf("_error") >= 0 || k.indexOf("missing") >= 0 || k.indexOf("no_location") >= 0 || k === "config_error" || k === "empty_library") {
-						trClass = "hk-warn";
-					} else if (k.indexOf("match") >= 0) {
-						trClass = "hk-ok";
-					}
-					var tr = $("<tr></tr>").addClass(trClass);
-					tr.append($("<td></td>").text(r.series || ""));
-					tr.append($("<td></td>").text(r.year || ""));
-					tr.append($("<td></td>").text(r.comicid || ""));
-					tr.append($("<td></td>").text(r.issue || ""));
-					tr.append($("<td></td>").text(k));
-					tr.append($("<td></td>").text(r.detail || ""));
-					tbody.append(tr);
+					housekeepingAppendRow(tbody, rows[i]);
 				}
 			},
 			error: function(xhr, status, err) {
