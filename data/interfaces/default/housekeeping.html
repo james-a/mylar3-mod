@@ -92,10 +92,15 @@
 %else:
 							<td class="hk-results hk-results-icons">
 								<div class="hk-audit-line"><span>Series folder:</span>
+<%
+	_cl = (row.get('comic_location') or '').strip()
+	_sfp = (row.get('result_series_folder') or '').strip() == 'Pass'
+	_sft = ('Pass' if _sfp else 'Fail') + ((' — ' + _cl) if _cl else '')
+%>
 %if (row.get('result_series_folder') or '').strip() == 'Pass':
-									<img src="images/checkmark.png" class="hk-audit-ico" width="16" height="16" alt="" title="Pass" />
+									<img src="images/checkmark.png" class="hk-audit-ico" width="16" height="16" alt="" title="${_sft|h}" />
 %else:
-									<img src="images/cross.png" class="hk-audit-ico" width="16" height="16" alt="" title="Fail" />
+									<img src="images/cross.png" class="hk-audit-ico" width="16" height="16" alt="" title="${_sft|h}" />
 %endif
 								</div>
 								<div class="hk-audit-line"><span>Issue files:</span>
@@ -173,10 +178,25 @@
 			}
 			return img;
 		}
+		function seriesFolderIco(passed, path) {
+			var p = (passed || "").toString().trim() === pass;
+			var base = p ? "Pass" : "Fail";
+			var t = base;
+			if (path) {
+				t = base + " — " + path;
+			}
+			var img = $("<img/>").addClass("hk-audit-ico").attr("width", 16).attr("height", 16);
+			if (p) {
+				img.attr("src", "images/checkmark.png").attr("title", t);
+			} else {
+				img.attr("src", "images/cross.png").attr("title", t);
+			}
+			return img;
+		}
 		var td = $("<td class='hk-results hk-results-icons'></td>");
 		var l1 = $("<div class='hk-audit-line'></div>");
 		l1.append($("<span></span>").text("Series folder:"));
-		l1.append(ico(r.result_series_folder));
+		l1.append(seriesFolderIco(r.result_series_folder, hkStr(r, "comic_location")));
 		var l2 = $("<div class='hk-audit-line'></div>");
 		l2.append($("<span></span>").text("Issue files:"));
 		l2.append(ico(r.result_issue_files));

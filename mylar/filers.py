@@ -97,6 +97,14 @@ class FileHandlers(object):
             if '\\' in folder_format:
                 folder_format = folder_format.replace('\\', '/').strip()
 
+        def _collapse_folder_path_seps(s):
+            """Remove duplicate path separators (e.g. $Publisher// when $Imprint is stripped or empty)."""
+            if not s:
+                return s
+            if mylar.OS_DETECT == 'Windows':
+                return re.sub(r'\\{2,}', r'\\', s)
+            return re.sub(r'/{2,}', '/', s)
+
         if publisher is not None:
             if publisher.endswith('.'):
                 publisher = publisher[:-1]
@@ -175,9 +183,7 @@ class FileHandlers(object):
             chunk_folder_format = chunk_folder_format[:ccf] + chunk_folder_format[ccf+1:]
 
         chunk_folder_format = re.sub(r'\s+', ' ', chunk_folder_format)
-
-        # if the path contains // in linux it will incorrectly parse things out.
-        #logger.fdebug('newPath: %s' % re.sub('//', '/', chunk_folder_format).strip())
+        chunk_folder_format = _collapse_folder_path_seps(chunk_folder_format)
 
         #do work to generate folder path
         values = {'$Series':        series,
@@ -257,6 +263,7 @@ class FileHandlers(object):
                 p_path = pathlib.PurePosixPath(ccdir)
             if enforce_format is True:
                 first = helpers.replace_all(chunk_folder_format, values)
+                first = _collapse_folder_path_seps(first)
                 if mylar.CONFIG.REPLACE_SPACES:
                     #mylar.CONFIG.REPLACE_CHAR ...determines what to replace spaces with underscore or dot
                     first = first.replace(' ', mylar.CONFIG.REPLACE_CHAR)
@@ -296,6 +303,7 @@ class FileHandlers(object):
 
             first = helpers.replace_all(chunk_folder_format, values)
             #logger.fdebug('first-1: %s' % first)
+            first = _collapse_folder_path_seps(first)
 
             if mylar.CONFIG.REPLACE_SPACES:
                 first = first.replace(' ', mylar.CONFIG.REPLACE_CHAR)
