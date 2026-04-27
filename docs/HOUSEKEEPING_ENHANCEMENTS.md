@@ -4,6 +4,8 @@
 
 **Purpose:** Durable **source of truth** for agents and future sessions: requirements, backlog, decisions, and changelog. It does **not** replace chat: answers and plans should still be given fully in the thread; this file is updated in parallel. If you edit it manually, ask an agent to **review and implement** as needed (see project rule `project-planning-docs`).
 
+**CI / container backlog (fork, not feature-specific):** `docs/FORK_CI_BACKLOG.md` (e.g. GHCR image tags).
+
 **Code references (mylar3-src):**
 - UI: `data/interfaces/default/housekeeping.html`
 - API: `mylar/webserve.py` — `housekeeping`, `housekeepingAudit`
@@ -139,6 +141,7 @@ with obvious definitions for `all_pass` and each `*_fail` from the JSON row. Unc
 | 2026-04-23 | — | **Process:** `confirm-before-coding` strengthened: “thoughts” = no implementation; confirm before any dev; optional once-off bypass if user states it. |
 | 2026-04-23 | — | Revert whole-bar filter hide; this file added under `mylar3-src/docs/`. Commit: `d445ab5`. |
 | 2026-04-27 | — | Revert `80893a5` (VS Code / watch script) as `508e12f`. **REQ-2:** `localStorage` key `mylar_housekeeping_audit_v1`, restore on load, clear button. Commit: `c07de4c`. |
+| 2026-04-28 | — | **CI-1** backlog: GHCR image version/tag clarity (see `docs/FORK_CI_BACKLOG.md`); no workflow change. |
 
 *Agents: add a row for each merged change affecting this feature.*
 
