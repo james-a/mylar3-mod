@@ -138,7 +138,7 @@ with obvious definitions for `all_pass` and each `*_fail` from the JSON row. Unc
 | 2026-04-23 | — | Filter UX: `Downloaded` / `Wanted` classes; per-label visibility by count. Commit `838237e` also hid the whole bar when no series rows — **reverted** (not required). |
 | 2026-04-23 | — | **Process:** `confirm-before-coding` strengthened: “thoughts” = no implementation; confirm before any dev; optional once-off bypass if user states it. |
 | 2026-04-23 | — | Revert whole-bar filter hide; this file added under `mylar3-src/docs/`. Commit: `d445ab5`. |
-| 2026-04-27 | — | Revert `80893a5` (VS Code / watch script) as `508e12f`. **REQ-2:** `localStorage` key `mylar_housekeeping_audit_v1`, restore on load, clear button. Commit: `f0ef323`. |
+| 2026-04-27 | — | Revert `80893a5` (VS Code / watch script) as `508e12f`. **REQ-2:** `localStorage` key `mylar_housekeeping_audit_v1`, restore on load, clear button. Commit: `c07de4c`. |
 
 *Agents: add a row for each merged change affecting this feature.*
 
