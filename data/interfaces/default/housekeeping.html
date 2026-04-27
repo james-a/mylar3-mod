@@ -24,7 +24,7 @@
 	</div>
 	<ul>
 		<li><strong>Audit</strong> lists every series like <strong>Manage comics</strong> and shows <strong>Results</strong> for three checks: series folder vs folder format, issue files (CBZ + file format; Archived fails; Skipped/Wanted/Snatched/Ignored ignored), and directory metadata sidecars when those options are enabled.</li>
-		<li>Use <strong>Run audit</strong> to load or refresh this table. Per-series actions such as <strong>Refresh Comic</strong>, <strong>Rename Folder</strong>, <strong>Rename Files</strong>, and <strong>Recheck files</strong> are on each comic&rsquo;s detail page.</li>
+		<li>Use <strong>Run audit</strong> to load or refresh this table. <strong>Filter by result</strong> (optional) refines the list using the checkboxes and counts; a row is shown if it matches <em>any</em> of the checked failure types or &ldquo;all passed&rdquo;, as in the app&rsquo;s other checkbox-filtered tables. Per-series actions such as <strong>Refresh Comic</strong>, <strong>Rename Folder</strong>, <strong>Rename Files</strong>, and <strong>Recheck files</strong> are on each comic&rsquo;s detail page.</li>
 	</ul>
 	<br/>
 	<hr/>
@@ -37,6 +37,26 @@
 				<span id="housekeeping_status" style="margin-left:12px;"></span>
 			</p>
 		</fieldset>
+	</div>
+	<div class="configtable" style="width:100%;max-width:1400px;clear:both;">
+		<div id="hk_checkboxControls" name="hk_checkboxControls" style="float:right;vertical-align:middle;margin:4px 3px 8px 3px;max-width:100%;text-align:right;">
+			<small style="display:block;margin-bottom:4px;">Filter by audit result (include row if it matches <em>any</em> checked category):</small>
+			<div style="padding-bottom:2px;">
+				<label for="hk_f_all" class="checkbox inline hk-filt-pass" title="Series with all three checks passed">
+					<input type="checkbox" name="hk_f_all" id="hk_f_all" checked="checked" /> All passed: <b><span id="hk_c_all">0</span></b>
+				</label>
+				<label for="hk_f_sf" class="checkbox inline hk-filt-fail" title="Failed series folder check">
+					<input type="checkbox" name="hk_f_sf" id="hk_f_sf" checked="checked" /> Folder: <b><span id="hk_c_sf">0</span></b>
+				</label>
+				<label for="hk_f_if" class="checkbox inline hk-filt-fail" title="Failed issue files check">
+					<input type="checkbox" name="hk_f_if" id="hk_f_if" checked="checked" /> Issue files: <b><span id="hk_c_if">0</span></b>
+				</label>
+				<label for="hk_f_md" class="checkbox inline hk-filt-fail" title="Failed metadata check">
+					<input type="checkbox" name="hk_f_md" id="hk_f_md" checked="checked" /> Metadata: <b><span id="hk_c_md">0</span></b>
+				</label>
+			</div>
+		</div>
+		<div style="clear:both"></div>
 	</div>
 	<br/>
 	<div class="table_wrapper">
@@ -65,7 +85,26 @@
 							_name_data_order = str(_dname or "").lower()
 							_da = row.get('DateAdded', '') or ''
 						%>
-						<tr class="hk-${row.get('row_class', 'files')}">
+						<%
+							if rk in ('config_error', 'empty_library', 'series_error'):
+								_rcls = "hk-%s hk-err" % row.get('row_class', 'files')
+							else:
+								_psf = (row.get('result_series_folder') or '').strip() == 'Pass'
+								_pif = (row.get('result_issue_files') or '').strip() == 'Pass'
+								_pmd = (row.get('result_metadata') or '').strip() == 'Pass'
+								_all3 = _psf and _pif and _pmd
+								_cparts = ['hk-%s' % row.get('row_class', 'files')]
+								if _all3:
+									_cparts.append('hk-row-all')
+								if not _psf:
+									_cparts.append('hk-sf')
+								if not _pif:
+									_cparts.append('hk-if')
+								if not _pmd:
+									_cparts.append('hk-md')
+								_rcls = " ".join(_cparts)
+						%>
+						<tr class="${_rcls}">
 							<td id="albumart"><div><img src="${row.get('ComicImage', 'cache/placeholder.jpg')}" height="75" width="50" alt="" /></div></td>
 							<td id="name" data-order="${_name_data_order|h}">
 %if row.get('comicid') is not None and str(row.get('comicid', '')).strip() not in ('', '—', 'None'):
@@ -140,6 +179,8 @@
 		#housekeeping_table .hk-audit-line { display: flex; align-items: center; gap: 6px; margin: 2px 0; font-size: 12px; }
 		#housekeeping_table .hk-audit-line span:first-child { min-width: 7.5em; color: #ccc; }
 		#housekeeping_table .hk-results-icons .hk-audit-ico { flex-shrink: 0; }
+		#hk_checkboxControls label.hk-filt-pass { background-color: #c3e3c8; height: auto; }
+		#hk_checkboxControls label.hk-filt-fail { background-color: #ffb0b0; height: auto; }
 	</style>
 </%def>
 
@@ -147,6 +188,95 @@
 	<script src="js/libs/jquery.dataTables.min.js"></script>
 	<script src="js/libs/full_numbers_no_ellipses.js"></script>
 	<script type="text/javascript">
+	if (typeof window.hkFilterState === "undefined") {
+		window.hkFilterState = { all: true, sf: true, iff: true, md: true };
+	}
+	function housekeepingRegisterResultFilter() {
+		if (window._housekeepingFilterRegistered) { return; }
+		window._housekeepingFilterRegistered = true;
+		$.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+			if (!settings.nTable || settings.nTable.id !== "housekeeping_table") { return true; }
+			var tr;
+			try {
+				var api = new $.fn.dataTable.Api(settings);
+				var row = api.row(dataIndex);
+				if (row && row.node) { tr = $(row.node()); }
+			} catch (e) { tr = $(); }
+			if (!tr || !tr.length) {
+				if (settings.aoData && settings.aoData[dataIndex] && settings.aoData[dataIndex].nTr) {
+					tr = $(settings.aoData[dataIndex].nTr);
+				} else { return true; }
+			}
+			if (tr.length === 0) { return true; }
+			if (tr.hasClass("hk-err") || tr.hasClass("hk-filt-orphan")) { return true; }
+			var st = window.hkFilterState || { all: true, sf: true, iff: true, md: true };
+			return (
+				(tr.hasClass("hk-row-all") && st.all) ||
+				(tr.hasClass("hk-sf") && st.sf) ||
+				(tr.hasClass("hk-if") && st.iff) ||
+				(tr.hasClass("hk-md") && st.md)
+			);
+		});
+	}
+	function housekeepingSyncFilterStateFromCheckboxes() {
+		window.hkFilterState = {
+			all: $("#hk_f_all").prop("checked"),
+			sf: $("#hk_f_sf").prop("checked"),
+			iff: $("#hk_f_if").prop("checked"),
+			md: $("#hk_f_md").prop("checked")
+		};
+	}
+	function housekeepingBindResultFilterControls() {
+		$("#hk_checkboxControls input[type=checkbox]")
+			.off("change.housekeepingFilter")
+			.on("change.housekeepingFilter", function () {
+				housekeepingSyncFilterStateFromCheckboxes();
+				if ($.fn.dataTable && $.fn.dataTable.isDataTable("#housekeeping_table")) {
+					$("#housekeeping_table").DataTable().draw(false);
+				}
+			});
+	}
+	function housekeepingUpdateResultFilterCounts() {
+		var c = { all: 0, sf: 0, iff: 0, md: 0, err: 0 };
+		$("#housekeeping_table tbody tr").each(function () {
+			var tr = $(this);
+			if (tr.hasClass("hk-filt-orphan")) { return; }
+			if (tr.hasClass("hk-err")) { c.err++; return; }
+			if (tr.hasClass("hk-row-all")) { c.all++; }
+			if (tr.hasClass("hk-sf")) { c.sf++; }
+			if (tr.hasClass("hk-if")) { c.iff++; }
+			if (tr.hasClass("hk-md")) { c.md++; }
+		});
+		$("#hk_c_all").text(c.all);
+		$("#hk_c_sf").text(c.sf);
+		$("#hk_c_if").text(c.iff);
+		$("#hk_c_md").text(c.md);
+	}
+	function hkRowClassFlags(r) {
+		var k = r.kind || "";
+		if (k === "config_error" || k === "empty_library" || k === "series_error") {
+			return { err: true, all: false, sf: false, iff: false, md: false };
+		}
+		var pass = "Pass";
+		var sf = (hkStr(r, "result_series_folder") || "").trim() === pass;
+		var inf = (hkStr(r, "result_issue_files") || "").trim() === pass;
+		var md = (hkStr(r, "result_metadata") || "").trim() === pass;
+		return {
+			err: false,
+			all: sf && inf && md,
+			sf: !sf,
+			iff: !inf,
+			md: !md
+		};
+	}
+	function housekeepingApplyRowClassFlags(tr, r) {
+		var f = hkRowClassFlags(r);
+		if (f.err) { tr.addClass("hk-err"); return; }
+		if (f.all) { tr.addClass("hk-row-all"); }
+		if (f.sf) { tr.addClass("hk-sf"); }
+		if (f.iff) { tr.addClass("hk-if"); }
+		if (f.md) { tr.addClass("hk-md"); }
+	}
 	function housekeepingDestroyDataTable() {
 		if (typeof $.fn.dataTable === "undefined" || !$.fn.dataTable.isDataTable("#housekeeping_table")) {
 			return;
@@ -157,6 +287,8 @@
 		if (typeof $.fn.dataTable === "undefined") {
 			return;
 		}
+		housekeepingRegisterResultFilter();
+		housekeepingSyncFilterStateFromCheckboxes();
 		$.fn.DataTable.ext.pager.numbers_length = 5;
 		$("#housekeeping_table").dataTable({
 			"destroy": true,
@@ -179,6 +311,8 @@
 			"pageLength": 25,
 			"pagingType": "simple_numbers"
 		});
+		housekeepingBindResultFilterControls();
+		housekeepingUpdateResultFilterCounts();
 	}
 	function hkStr(r, k) {
 		var v = r[k];
@@ -260,6 +394,7 @@
 	function housekeepingAppendRow(tbody, r) {
 		var rc = r.row_class || "files";
 		var tr = $("<tr></tr>").addClass("hk-" + rc);
+		housekeepingApplyRowClassFlags(tr, r);
 		var cid = r.comicid;
 		var cidStr = cid != null ? String(cid).trim() : "";
 		var imgSrc = r.ComicImage || ("cache/" + cidStr + ".jpg");
@@ -329,7 +464,7 @@
 					for (var c = 0; c < 9; c++) {
 						tds.push(c === 0 ? "<td>No data returned.</td>" : "<td></td>");
 					}
-					tbody.append("<tr class='hk-stale'>" + tds.join("") + "</tr>");
+					tbody.append("<tr class='hk-stale hk-filt-orphan'>" + tds.join("") + "</tr>");
 					housekeepingInitDataTable();
 					return;
 				}
