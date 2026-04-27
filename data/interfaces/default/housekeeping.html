@@ -42,9 +42,8 @@
 	</div>
 	## Filter bar: 'Downloaded' (green) + 'Wanted' (red) from style.css; each label display:none until its count &gt; 0 (comic details pattern).
 	<div id="hk_filter_bar" class="configtable" style="width:100%;max-width:1400px;clear:both;">
-		<div id="hk_checkboxControls" name="hk_checkboxControls" style="float:right;vertical-align:middle;margin:4px 3px 8px 3px;max-width:100%;text-align:right;">
-			<small id="hk_filter_help" style="display:block;margin-bottom:4px;">Filter by audit result (include row if it matches <em>any</em> checked category):</small>
-			<div style="padding-bottom:2px;">
+		<div id="hk_checkboxControls" name="hk_checkboxControls" style="float:right;vertical-align:middle;margin:4px 3px 0 3px;max-width:100%;text-align:right;">
+			<div style="padding-bottom:0;">
 				<label for="hk_f_all" id="hk_label_all" class="checkbox inline Downloaded" style="display:none;" title="Series with all three checks passed">
 					<input type="checkbox" name="hk_f_all" id="hk_f_all" checked="checked" /> All passed: <b><span id="hk_c_all">0</span></b>
 				</label>
@@ -61,8 +60,7 @@
 		</div>
 		<div style="clear:both"></div>
 	</div>
-	<br/>
-	<div class="table_wrapper">
+	<div class="table_wrapper" id="housekeeping_table_wrapper">
 		<table class="display" id="housekeeping_table">
 			<thead>
 				<tr>
@@ -182,6 +180,7 @@
 		#housekeeping_table .hk-audit-line { display: flex; align-items: center; gap: 6px; margin: 2px 0; font-size: 12px; }
 		#housekeeping_table .hk-audit-line span:first-child { min-width: 7.5em; color: #ccc; }
 		#housekeeping_table .hk-results-icons .hk-audit-ico { flex-shrink: 0; }
+		#housekeeping_table_wrapper { margin-top: 0; }
 	</style>
 </%def>
 
@@ -320,7 +319,7 @@
 				"info": "Showing _START_ to _END_ of _TOTAL_ results",
 				"infoEmpty": "Showing 0 to 0 of 0 results",
 				"infoFiltered": "(filtered from _MAX_ total results)",
-				"search": ""
+				"search": "Filter:"
 			},
 			"stateSave": true,
 			"pageLength": 25,
