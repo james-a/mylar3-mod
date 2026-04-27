@@ -9,7 +9,7 @@
 - API: `mylar/webserve.py` — `housekeeping`, `housekeepingAudit`
 - Audit logic: `contrib/mylar_housekeeping/audit.py`
 
-**Current behaviour (baseline):** `housekeeping` renders with `audit_rows=[]`. “Run audit” calls `housekeepingAudit` (synchronous, blocks until `run_library_audit()` finishes), then the client JS replaces the table body. No DataTables, no persistence, no filters.
+**Current behaviour (snapshot):** `housekeeping` loads with an empty table unless **browser `localStorage`** has a previous audit payload, which is restored client-side. “Run audit” calls `housekeepingAudit`, then the client updates the table and **persists** the JSON to `localStorage` (a new run replaces the stored list). “Clear saved results” removes the cache and shows the empty state.
 
 **Implementation policy:** **One requirement (or sub-requirement) per git commit** unless a change is unusable without a tiny follow-up. Confirm scope in chat before writing code (see project rule `confirm-before-coding`).
 
@@ -22,7 +22,7 @@
 | **REQ-1** | **High** | **Filtering and sorting** | **Done** | See §1 |
 | REQ-1.1 | High | Column sorting: Comic Name (default), Status, Publisher, Updated | **Done** | DataTables: same `sDom` / `stateSave` / paging style as `managecomics.html`; re-init after Run audit. |
 | REQ-1.2 | High | Result filters with counts, checkbox UX per `/upcoming`-style | **Done** | Checkboxes + row classes + `ext.search` OR; **per-label** show only when that category’s count &gt; 0; reuse **`Downloaded`** / **`Wanted`** from `style.css` (comic details pattern). **Not** a requirement: hiding the **entire** filter block when the table has no series-level rows. |
-| **REQ-2** | Low–medium | **Retain last audit results** (survive navigation / session) | Backlog | See §2 |
+| **REQ-2** | Low–medium | **Retain last audit results** (survive navigation / session) | **Done** | `localStorage` key `mylar_housekeeping_audit_v1`; restore on load; **Run audit** overwrites; **Clear saved results** |
 | **REQ-3** | Medium | **Pagination** (controls top + bottom, page size, “showing X–Y of Z”) | Backlog | Reuse DataTables; align `lengthMenu` with app norms |
 | **REQ-4** | Low / future | **Audit performance** (non-blocking, faster on large DBs) | Assessed / backlog | See §4 — no code until prioritized |
 
@@ -66,8 +66,9 @@ with obvious definitions for `all_pass` and each `*_fail` from the JSON row. Unc
 
 ---
 
-## §2 — Retain audit results (REQ-2)
+## §2 — Retain audit results (REQ-2) **done**
 
+- **Implementation:** `localStorage` (key `mylar_housekeeping_audit_v1`, payload `v: 1`, `savedAt` ISO, `message`, `rows`). Restored on page load when present. **Re-run (Run audit)** replaces the snapshot on success. **Clear saved results** removes the key and returns the table to the empty state.
 - **Re-run** replaces stored snapshot.
 - **Clear** button removes stored snapshot and resets UI to empty/placeholder.
 - **Options:**
@@ -136,7 +137,8 @@ with obvious definitions for `all_pass` and each `*_fail` from the JSON row. Unc
 | 2026-04-23 | — | **REQ-1.2:** Result filters (all passed, folder / issue / metadata fail) with counts; `mylar3-src/docs/CONTRIBUTING_GIT.md` + `.cursor/rules/git-workflow.mdc`. Commits: `0dcdbd4` (REQ-1.1), `9441ea4` (REQ-1.2). |
 | 2026-04-23 | — | Filter UX: `Downloaded` / `Wanted` classes; per-label visibility by count. Commit `838237e` also hid the whole bar when no series rows — **reverted** (not required). |
 | 2026-04-23 | — | **Process:** `confirm-before-coding` strengthened: “thoughts” = no implementation; confirm before any dev; optional once-off bypass if user states it. |
-| 2026-04-23 | — | Revert whole-bar filter hide; this file added under `mylar3-src/docs/`. Commit: `fd46f82`. |
+| 2026-04-23 | — | Revert whole-bar filter hide; this file added under `mylar3-src/docs/`. Commit: `d445ab5`. |
+| 2026-04-27 | — | Revert `80893a5` (VS Code / watch script) as `508e12f`. **REQ-2:** `localStorage` key `mylar_housekeeping_audit_v1`, restore on load, clear button. Commit: `f0ef323`. |
 
 *Agents: add a row for each merged change affecting this feature.*
 

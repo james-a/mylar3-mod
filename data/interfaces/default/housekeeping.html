@@ -24,7 +24,7 @@
 	</div>
 	<ul>
 		<li><strong>Audit</strong> lists every series like <strong>Manage comics</strong> and shows <strong>Results</strong> for three checks: series folder vs folder format, issue files (CBZ + file format; Archived fails; Skipped/Wanted/Snatched/Ignored ignored), and directory metadata sidecars when those options are enabled.</li>
-		<li>Use <strong>Run audit</strong> to load or refresh this table. <strong>Filter by result</strong> (optional) refines the list using the checkboxes and counts; a row is shown if it matches <em>any</em> of the checked failure types or &ldquo;all passed&rdquo;, as in the app&rsquo;s other checkbox-filtered tables. Per-series actions such as <strong>Refresh Comic</strong>, <strong>Rename Folder</strong>, <strong>Rename Files</strong>, and <strong>Recheck files</strong> are on each comic&rsquo;s detail page.</li>
+		<li>Use <strong>Run audit</strong> to load or refresh this table; the last completed result is <strong>saved in this browser</strong> so you can leave the page and return without re-running the audit (a new run replaces it). Use <strong>Clear saved results</strong> to remove the stored list. <strong>Filter by result</strong> (optional) refines the list using the checkboxes and counts; a row is shown if it matches <em>any</em> of the checked failure types or &ldquo;all passed&rdquo;, as in the app&rsquo;s other checkbox-filtered tables. Per-series actions such as <strong>Refresh Comic</strong>, <strong>Rename Folder</strong>, <strong>Rename Files</strong>, and <strong>Recheck files</strong> are on each comic&rsquo;s detail page.</li>
 	</ul>
 	<br/>
 	<hr/>
@@ -34,6 +34,8 @@
 			<p>
 				<input id="housekeeping_run_audit" type="button" value="Run audit"
 					onclick="housekeepingRunAudit();" />
+				<input id="housekeeping_clear_saved" type="button" value="Clear saved results"
+					onclick="housekeepingClearSaved();" style="margin-left:8px;" />
 				<span id="housekeeping_status" style="margin-left:12px;"></span>
 			</p>
 		</fieldset>
@@ -450,6 +452,89 @@
 		tr.append(hkResultCell(r));
 		tbody.append(tr);
 	}
+	var HK_STORAGE_KEY = "mylar_housekeeping_audit_v1";
+	function housekeepingPersistAudit(resp) {
+		try {
+			var payload = {
+				v: 1,
+				savedAt: new Date().toISOString(),
+				message: resp.message != null ? String(resp.message) : "",
+				rows: resp.rows != null && Array.isArray(resp.rows) ? resp.rows : []
+			};
+			localStorage.setItem(HK_STORAGE_KEY, JSON.stringify(payload));
+		} catch (e) {
+			/* Quota or private mode: ignore. */
+		}
+	}
+	function housekeepingApplyAuditRows(resp) {
+		$("#housekeeping_status").text(resp.message != null ? String(resp.message) : "");
+		housekeepingDestroyDataTable();
+		var tbody = $("#housekeeping_table tbody");
+		tbody.empty();
+		var rows = resp.rows || [];
+		if (rows.length === 0) {
+			var tds = [];
+			for (var c = 0; c < 9; c++) {
+				tds.push(c === 0 ? "<td>No data returned.</td>" : "<td></td>");
+			}
+			tbody.append("<tr class='hk-stale hk-filt-orphan'>" + tds.join("") + "</tr>");
+			housekeepingInitDataTable();
+			return;
+		}
+		for (var j = 0; j < rows.length; j++) {
+			housekeepingAppendRow(tbody, rows[j]);
+		}
+		housekeepingInitDataTable();
+	}
+	function housekeepingTryRestoreFromCache() {
+		var raw = null;
+		try {
+			raw = localStorage.getItem(HK_STORAGE_KEY);
+		} catch (e) {
+			housekeepingInitDataTable();
+			return;
+		}
+		if (!raw) {
+			housekeepingInitDataTable();
+			return;
+		}
+		var o;
+		try {
+			o = JSON.parse(raw);
+		} catch (e) {
+			housekeepingInitDataTable();
+			return;
+		}
+		if (!o || o.v !== 1 || !Array.isArray(o.rows)) {
+			housekeepingInitDataTable();
+			return;
+		}
+		housekeepingApplyAuditRows({ message: o.message, rows: o.rows });
+		var when = "";
+		if (o.savedAt) {
+			try {
+				var d = new Date(o.savedAt);
+				if (!isNaN(d.getTime())) {
+					when = " (saved " + d.toLocaleString() + ", this browser)";
+				}
+			} catch (e2) {
+				when = " (saved, this browser)";
+			}
+		} else {
+			when = " (saved, this browser)";
+		}
+		$("#housekeeping_status").text((o.message || "Saved audit") + when);
+	}
+	function housekeepingClearSaved() {
+		try {
+			localStorage.removeItem(HK_STORAGE_KEY);
+		} catch (e) {
+		}
+		housekeepingDestroyDataTable();
+		$("#housekeeping_table tbody").empty();
+		housekeepingInitDataTable();
+		$("#housekeeping_status").text("Saved results cleared.");
+	}
 	function housekeepingRunAudit() {
 		var feedback = $("#ajaxMsg");
 		feedback.fadeIn();
@@ -467,24 +552,8 @@
 					$("#housekeeping_status").text(resp.message || "Audit failed");
 					return;
 				}
-				$("#housekeeping_status").text(resp.message || "");
-				housekeepingDestroyDataTable();
-				var tbody = $("#housekeeping_table tbody");
-				tbody.empty();
-				var rows = resp.rows || [];
-				if (rows.length === 0) {
-					var tds = [];
-					for (var c = 0; c < 9; c++) {
-						tds.push(c === 0 ? "<td>No data returned.</td>" : "<td></td>");
-					}
-					tbody.append("<tr class='hk-stale hk-filt-orphan'>" + tds.join("") + "</tr>");
-					housekeepingInitDataTable();
-					return;
-				}
-				for (var i = 0; i < rows.length; i++) {
-					housekeepingAppendRow(tbody, rows[i]);
-				}
-				housekeepingInitDataTable();
+				housekeepingApplyAuditRows(resp);
+				housekeepingPersistAudit(resp);
 			},
 			error: function(xhr, status, err) {
 				loader.remove();
@@ -494,7 +563,7 @@
 		});
 	}
 	$(document).ready(function() {
-		housekeepingInitDataTable();
+		housekeepingTryRestoreFromCache();
 	});
 	</script>
 </%def>
