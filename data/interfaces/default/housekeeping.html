@@ -38,20 +38,22 @@
 			</p>
 		</fieldset>
 	</div>
-	<div class="configtable" style="width:100%;max-width:1400px;clear:both;">
+	## Filter bar: same pattern as comic details / upcoming — 'Downloaded' (green) + 'Wanted' (red) from style.css, labels
+	## display:none until count &gt; 0; whole bar hidden when there are no series-level audit rows to filter.
+	<div id="hk_filter_bar" class="configtable" style="display:none;width:100%;max-width:1400px;clear:both;">
 		<div id="hk_checkboxControls" name="hk_checkboxControls" style="float:right;vertical-align:middle;margin:4px 3px 8px 3px;max-width:100%;text-align:right;">
-			<small style="display:block;margin-bottom:4px;">Filter by audit result (include row if it matches <em>any</em> checked category):</small>
+			<small id="hk_filter_help" style="display:block;margin-bottom:4px;">Filter by audit result (include row if it matches <em>any</em> checked category):</small>
 			<div style="padding-bottom:2px;">
-				<label for="hk_f_all" class="checkbox inline hk-filt-pass" title="Series with all three checks passed">
+				<label for="hk_f_all" id="hk_label_all" class="checkbox inline Downloaded" style="display:none;" title="Series with all three checks passed">
 					<input type="checkbox" name="hk_f_all" id="hk_f_all" checked="checked" /> All passed: <b><span id="hk_c_all">0</span></b>
 				</label>
-				<label for="hk_f_sf" class="checkbox inline hk-filt-fail" title="Failed series folder check">
+				<label for="hk_f_sf" id="hk_label_sf" class="checkbox inline Wanted" style="display:none;" title="Failed series folder check">
 					<input type="checkbox" name="hk_f_sf" id="hk_f_sf" checked="checked" /> Folder: <b><span id="hk_c_sf">0</span></b>
 				</label>
-				<label for="hk_f_if" class="checkbox inline hk-filt-fail" title="Failed issue files check">
+				<label for="hk_f_if" id="hk_label_if" class="checkbox inline Wanted" style="display:none;" title="Failed issue files check">
 					<input type="checkbox" name="hk_f_if" id="hk_f_if" checked="checked" /> Issue files: <b><span id="hk_c_if">0</span></b>
 				</label>
-				<label for="hk_f_md" class="checkbox inline hk-filt-fail" title="Failed metadata check">
+				<label for="hk_f_md" id="hk_label_md" class="checkbox inline Wanted" style="display:none;" title="Failed metadata check">
 					<input type="checkbox" name="hk_f_md" id="hk_f_md" checked="checked" /> Metadata: <b><span id="hk_c_md">0</span></b>
 				</label>
 			</div>
@@ -179,8 +181,6 @@
 		#housekeeping_table .hk-audit-line { display: flex; align-items: center; gap: 6px; margin: 2px 0; font-size: 12px; }
 		#housekeeping_table .hk-audit-line span:first-child { min-width: 7.5em; color: #ccc; }
 		#housekeeping_table .hk-results-icons .hk-audit-ico { flex-shrink: 0; }
-		#hk_checkboxControls label.hk-filt-pass { background-color: #c3e3c8; height: auto; }
-		#hk_checkboxControls label.hk-filt-fail { background-color: #ffb0b0; height: auto; }
 	</style>
 </%def>
 
@@ -236,6 +236,12 @@
 				}
 			});
 	}
+	function housekeepingSetFilterLabelVisible(sel, n) {
+		/* Match comic details / issue table: only show a filter when its count > 0. */
+		var on = n > 0;
+		$(sel).css("display", on ? "inline" : "none");
+		if (!on) { $(sel).find("input[type=checkbox]").prop("checked", true); }
+	}
 	function housekeepingUpdateResultFilterCounts() {
 		var c = { all: 0, sf: 0, iff: 0, md: 0, err: 0 };
 		$("#housekeeping_table tbody tr").each(function () {
@@ -251,6 +257,26 @@
 		$("#hk_c_sf").text(c.sf);
 		$("#hk_c_if").text(c.iff);
 		$("#hk_c_md").text(c.md);
+		/* No series-level audit rows: hide entire filter area (empty audit, "no data", or only library messages / errors). */
+		var anySeries = c.all + c.sf + c.iff + c.md;
+		if (anySeries === 0) {
+			$("#hk_filter_bar").hide();
+			$("#hk_f_all, #hk_f_sf, #hk_f_if, #hk_f_md").prop("checked", true);
+			housekeepingSyncFilterStateFromCheckboxes();
+			if ($.fn.dataTable && $.fn.dataTable.isDataTable("#housekeeping_table")) {
+				$("#housekeeping_table").DataTable().draw(false);
+			}
+			return;
+		}
+		$("#hk_filter_bar").show();
+		housekeepingSetFilterLabelVisible("#hk_label_all", c.all);
+		housekeepingSetFilterLabelVisible("#hk_label_sf", c.sf);
+		housekeepingSetFilterLabelVisible("#hk_label_if", c.iff);
+		housekeepingSetFilterLabelVisible("#hk_label_md", c.md);
+		housekeepingSyncFilterStateFromCheckboxes();
+		if ($.fn.dataTable && $.fn.dataTable.isDataTable("#housekeeping_table")) {
+			$("#housekeeping_table").DataTable().draw(false);
+		}
 	}
 	function hkRowClassFlags(r) {
 		var k = r.kind || "";
