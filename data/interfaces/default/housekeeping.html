@@ -61,10 +61,13 @@
 							rk = row.get('kind', '')
 							pn = _hk_percent(row)
 							pcss = _hk_pcss(pn)
+							_dname = row.get('comic_name_link') or row.get('series') or ''
+							_name_data_order = str(_dname or "").lower()
+							_da = row.get('DateAdded', '') or ''
 						%>
 						<tr class="hk-${row.get('row_class', 'files')}">
 							<td id="albumart"><div><img src="${row.get('ComicImage', 'cache/placeholder.jpg')}" height="75" width="50" alt="" /></div></td>
-							<td id="name">
+							<td id="name" data-order="${_name_data_order|h}">
 %if row.get('comicid') is not None and str(row.get('comicid', '')).strip() not in ('', '—', 'None'):
 								<a href="comicDetails?ComicID=${row['comicid']}">${row.get('comic_name_link', row.get('series', ''))}</a>
 %else:
@@ -86,7 +89,7 @@
 							<td id="latest">${row.get('latest_display', '—')}</td>
 							<td id="publisher">${row.get('publisher', '')}</td>
 							<td id="have" valign="center" data-order="${pn}"><span title="${pn}"></span><div class="${pcss}"><div style="width:${pn}%"><span class="progressbar-front-text">${row.get('have_display') or (str(row.get('haveissues', 0)) + '/' + str(row.get('totalissues', 0)))}</span></div></div></td>
-							<td id="lastupdated">${row.get('DateAdded', '—')}</td>
+							<td id="lastupdated" data-order="${_da|h}">${row.get('DateAdded', '—')}</td>
 %if rk in ('config_error', 'empty_library', 'series_error'):
 							<td class="hk-results">${row.get('results_line', '')|h}</td>
 %else:
@@ -121,10 +124,6 @@
 %endif
 						</tr>
 					%endfor
-				%else:
-					<tr id="housekeeping_placeholder_row">
-						<td colspan="9">No audit results yet — click <strong>Run audit</strong>.</td>
-					</tr>
 				%endif
 			</tbody>
 		</table>
@@ -145,7 +144,42 @@
 </%def>
 
 <%def name="javascriptIncludes()">
+	<script src="js/libs/jquery.dataTables.min.js"></script>
+	<script src="js/libs/full_numbers_no_ellipses.js"></script>
 	<script type="text/javascript">
+	function housekeepingDestroyDataTable() {
+		if (typeof $.fn.dataTable === "undefined" || !$.fn.dataTable.isDataTable("#housekeeping_table")) {
+			return;
+		}
+		$("#housekeeping_table").DataTable().destroy();
+	}
+	function housekeepingInitDataTable() {
+		if (typeof $.fn.dataTable === "undefined") {
+			return;
+		}
+		$.fn.DataTable.ext.pager.numbers_length = 5;
+		$("#housekeeping_table").dataTable({
+			"destroy": true,
+			"sDom": '<"clear"f><"clear"lp><"clear">rt<"clear"ip>',
+			"deferRender": true,
+			"columnDefs": [
+				{ "bSortable": false, "aTargets": [0, 3, 4, 6, 8] }
+			],
+			"order": [[1, "asc"]],
+			"lengthMenu": [[10, 25, 50, -1], [10, 25, 50, "All"]],
+			"language": {
+				"lengthMenu": "Show _MENU_ results per page",
+				"emptyTable": "No audit results yet. Click Run audit.",
+				"info": "Showing _START_ to _END_ of _TOTAL_ results",
+				"infoEmpty": "Showing 0 to 0 of 0 results",
+				"infoFiltered": "(filtered from _MAX_ total results)",
+				"search": ""
+			},
+			"stateSave": true,
+			"pageLength": 25,
+			"pagingType": "simple_numbers"
+		});
+	}
 	function hkStr(r, k) {
 		var v = r[k];
 		if (v === undefined || v === null) return "";
@@ -235,6 +269,8 @@
 		tr.append(art);
 		var nameTd = $("<td id='name'></td>");
 		var dispName = r.comic_name_link || r.series || "";
+		var sortName = (dispName || hkStr(r, "series") || "").toLowerCase();
+		nameTd.attr("data-order", sortName);
 		if (cidStr !== "" && cidStr !== "—" && cidStr !== "None") {
 			nameTd.append($("<a></a>").attr("href", "comicDetails?ComicID=" + encodeURIComponent(cidStr)).text(dispName));
 		} else {
@@ -257,7 +293,12 @@
 		tr.append($("<td id='latest'></td>").text(hkStr(r, "latest_display")));
 		tr.append($("<td id='publisher'></td>").text(hkStr(r, "publisher")));
 		tr.append(housekeepingHaveCell(r));
-		tr.append($("<td id='lastupdated'></td>").text(hkStr(r, "DateAdded")));
+		var da = hkStr(r, "DateAdded");
+		tr.append(
+			$("<td id='lastupdated'></td>")
+				.attr("data-order", da)
+				.text(da || "—")
+		);
 		tr.append(hkResultCell(r));
 		tbody.append(tr);
 	}
@@ -279,16 +320,23 @@
 					return;
 				}
 				$("#housekeeping_status").text(resp.message || "");
+				housekeepingDestroyDataTable();
 				var tbody = $("#housekeeping_table tbody");
 				tbody.empty();
 				var rows = resp.rows || [];
 				if (rows.length === 0) {
-					tbody.append("<tr class='hk-stale'><td colspan='9'>No data returned.</td></tr>");
+					var tds = [];
+					for (var c = 0; c < 9; c++) {
+						tds.push(c === 0 ? "<td>No data returned.</td>" : "<td></td>");
+					}
+					tbody.append("<tr class='hk-stale'>" + tds.join("") + "</tr>");
+					housekeepingInitDataTable();
 					return;
 				}
 				for (var i = 0; i < rows.length; i++) {
 					housekeepingAppendRow(tbody, rows[i]);
 				}
+				housekeepingInitDataTable();
 			},
 			error: function(xhr, status, err) {
 				loader.remove();
@@ -297,5 +345,8 @@
 			}
 		});
 	}
+	$(document).ready(function() {
+		housekeepingInitDataTable();
+	});
 	</script>
 </%def>
