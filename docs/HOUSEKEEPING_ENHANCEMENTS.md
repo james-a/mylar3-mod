@@ -142,6 +142,7 @@ with obvious definitions for `all_pass` and each `*_fail` from the JSON row. Unc
 | 2026-04-23 | — | Revert whole-bar filter hide; this file added under `mylar3-src/docs/`. Commit: `d445ab5`. |
 | 2026-04-27 | — | Revert `80893a5` (VS Code / watch script) as `508e12f`. **REQ-2:** `localStorage` key `mylar_housekeeping_audit_v1`, restore on load, clear button. Commit: `c07de4c`. |
 | 2026-04-28 | — | **CI-1** backlog: GHCR image version/tag clarity (see `docs/FORK_CI_BACKLOG.md`); no workflow change. |
+| 2026-04-28 | — | **Bugfix:** Result filter checkbox counts use full in-memory audit `rows` (`housekeepingAuditRows`), not `tbody` (fixes wrong counts with DataTables `deferRender` + pagination). |
 
 *Agents: add a row for each merged change affecting this feature.*
 

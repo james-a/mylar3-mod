@@ -191,6 +191,9 @@
 	if (typeof window.hkFilterState === "undefined") {
 		window.hkFilterState = { all: true, sf: true, iff: true, md: true };
 	}
+	if (typeof window.housekeepingAuditRows === "undefined") {
+		window.housekeepingAuditRows = [];
+	}
 	function housekeepingRegisterResultFilter() {
 		if (window._housekeepingFilterRegistered) { return; }
 		window._housekeepingFilterRegistered = true;
@@ -243,16 +246,21 @@
 		if (!on) { $(sel).find("input[type=checkbox]").prop("checked", true); }
 	}
 	function housekeepingUpdateResultFilterCounts() {
+		/* Counts from in-memory audit rows (full dataset), not tbody — DataTables
+		   deferRender only materialises the current page, same idea as
+		   update_upcoming_filters / update_series_filters driving totals. */
 		var c = { all: 0, sf: 0, iff: 0, md: 0, err: 0 };
-		$("#housekeeping_table tbody tr").each(function () {
-			var tr = $(this);
-			if (tr.hasClass("hk-filt-orphan")) { return; }
-			if (tr.hasClass("hk-err")) { c.err++; return; }
-			if (tr.hasClass("hk-row-all")) { c.all++; }
-			if (tr.hasClass("hk-sf")) { c.sf++; }
-			if (tr.hasClass("hk-if")) { c.iff++; }
-			if (tr.hasClass("hk-md")) { c.md++; }
-		});
+		var list = window.housekeepingAuditRows;
+		if (list && list.length) {
+			for (var i = 0; i < list.length; i++) {
+				var f = hkRowClassFlags(list[i]);
+				if (f.err) { c.err++; continue; }
+				if (f.all) { c.all++; }
+				if (f.sf) { c.sf++; }
+				if (f.iff) { c.iff++; }
+				if (f.md) { c.md++; }
+			}
+		}
 		$("#hk_c_all").text(c.all);
 		$("#hk_c_sf").text(c.sf);
 		$("#hk_c_if").text(c.iff);
@@ -471,6 +479,7 @@
 		var tbody = $("#housekeeping_table tbody");
 		tbody.empty();
 		var rows = resp.rows || [];
+		window.housekeepingAuditRows = rows.length ? rows.slice(0) : [];
 		if (rows.length === 0) {
 			var tds = [];
 			for (var c = 0; c < 9; c++) {
@@ -490,10 +499,12 @@
 		try {
 			raw = localStorage.getItem(HK_STORAGE_KEY);
 		} catch (e) {
+			window.housekeepingAuditRows = [];
 			housekeepingInitDataTable();
 			return;
 		}
 		if (!raw) {
+			window.housekeepingAuditRows = [];
 			housekeepingInitDataTable();
 			return;
 		}
@@ -501,10 +512,12 @@
 		try {
 			o = JSON.parse(raw);
 		} catch (e) {
+			window.housekeepingAuditRows = [];
 			housekeepingInitDataTable();
 			return;
 		}
 		if (!o || o.v !== 1 || !Array.isArray(o.rows)) {
+			window.housekeepingAuditRows = [];
 			housekeepingInitDataTable();
 			return;
 		}
@@ -531,6 +544,7 @@
 		}
 		housekeepingDestroyDataTable();
 		$("#housekeeping_table tbody").empty();
+		window.housekeepingAuditRows = [];
 		housekeepingInitDataTable();
 		$("#housekeeping_status").text("Saved results cleared.");
 	}
