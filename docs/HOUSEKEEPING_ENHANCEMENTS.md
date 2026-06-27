@@ -174,6 +174,7 @@ with obvious definitions for `all_pass` and each `*_fail` from the JSON row. Unc
 | 2026-04-28 | — | **CI-1** backlog: GHCR image version/tag clarity (see `docs/FORK_CI_BACKLOG.md`); no workflow change. |
 | 2026-04-28 | — | **Bugfix:** Result filter checkbox counts use full in-memory audit `rows` (`housekeepingAuditRows`), not `tbody` (fixes wrong counts with DataTables `deferRender` + pagination). |
 | 2026-04-28 | — | **REQ-5** backlog: Rename folder / `folder_create` should use **Force-Type** (`Corrected_Type`) for `$Type`; see §5. |
+| 2026-06-27 | — | Merged upstream **v0.10.0** into `ghcr-build`; no housekeeping code conflicts; smoke-test after deploy (audit, filters, localStorage, Rename Folder). |
 
 *Agents: add a row for each merged change affecting this feature.*
 
