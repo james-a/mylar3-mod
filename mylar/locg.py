@@ -51,7 +51,8 @@ def locg(pulldate=None,weeknumber=None,year=None):
         params = {'week': str(weeknumber),
                   'year': str(year)}
 
-        url = 'https://walksoftly.itsaninja.party/newcomics.php'
+        url = '%s/newcomics.php' % mylar.CONFIG.RELEASE_PROVIDER_URL
+        logger.info(url)
 
         try:
             r = requests.get(url, params=params, verify=True, headers={'User-Agent': mylar.USER_AGENT[:mylar.USER_AGENT.find('/')+7] + mylar.USER_AGENT[mylar.USER_AGENT.find('(')+1]})
@@ -64,7 +65,7 @@ def locg(pulldate=None,weeknumber=None,year=None):
             logger.warn('[%s] No date supplied, or an invalid date was provided [%s]' % (r.status_code, pulldate))
             return {'status': 'failure'}
         elif str(r.status_code) == '522':
-            logger.warn('[%s] Walksoftly is currently offline. Data shown may be stale until it comes back online' % (r.status_code,))
+            logger.warn('[%s] The weekly info backend is currently offline. Data shown may be stale until it comes back online' % (r.status_code,))
             mylar.BACKENDSTATUS_WS = 'down'
             return {'status': 'failure'}
         elif str(r.status_code) == '999' or str(r.status_code) == '111':
