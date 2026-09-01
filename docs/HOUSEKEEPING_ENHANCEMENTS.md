@@ -10,6 +10,7 @@
 - UI: `data/interfaces/default/housekeeping.html`
 - API: `mylar/webserve.py` — `housekeeping`, `housekeepingAudit`, `comicRenameFolder`
 - Audit logic: `contrib/mylar_housekeeping/audit.py`
+- CBZ metadata: `contrib/mylar_housekeeping/cbz_metadata.py` — `housekeepingSeriesMetadataAudit`, `IssueInfo` enrichment, metatag stamp in `cmtagmylar.py`
 - Folder rename (align to format): `contrib/mylar_housekeeping/folder_align.py` → `mylar.filers.FileHandlers.folder_create()`
 
 **Current behaviour (snapshot):** `housekeeping` loads with an empty table unless **browser `localStorage`** has a previous audit payload, which is restored client-side. “Run audit” calls `housekeepingAudit`, then the client updates the table and **persists** the JSON to `localStorage` (a new run replaces the stored list). “Clear saved results” removes the cache and shows the empty state.
@@ -26,9 +27,12 @@
 | REQ-1.1 | High | Column sorting: Comic Name (default), Status, Publisher, Updated | **Done** | DataTables: same `sDom` / `stateSave` / paging style as `managecomics.html`; re-init after Run audit. |
 | REQ-1.2 | High | Result filters with counts, checkbox UX per `/upcoming`-style | **Done** | Checkboxes + row classes + `ext.search` OR; **per-label** show only when that category’s count &gt; 0; reuse **`Downloaded`** / **`Wanted`** from `style.css` (comic details pattern). **Not** a requirement: hiding the **entire** filter block when the table has no series-level rows. |
 | **REQ-2** | Low–medium | **Retain last audit results** (survive navigation / session) | **Done** | `localStorage` key `mylar_housekeeping_audit_v1`; restore on load; **Run audit** overwrites; **Clear saved results** |
-| **REQ-3** | Medium | **Pagination** (controls top + bottom, page size, “showing X–Y of Z”) | Backlog | Reuse DataTables; align `lengthMenu` with app norms |
+| **REQ-3** | Medium | **Pagination** (controls top + bottom, page size, “showing X–Y of Z”) | **Done** | Implemented with REQ-1.1; see §3 — optional polish: expand `lengthMenu` to match post–v0.11.0 Manage Comics. |
 | **REQ-4** | Low / future | **Audit performance** (non-blocking, faster on large DBs) | Assessed / backlog | See §4 — no code until prioritized |
 | **REQ-5** | Medium | **Rename folder** respects **Force-Type** (`Corrected_Type`) for `$Type` in folder format | **Backlog** | See §5 — same-year name collision (Print run vs TPB) when override ignored |
+| **REQ-6** | Medium–high | **CBZ ComicInfo validation** (Mylar metatag provenance + DB alignment, no CV API) | **Done** (6.1–6.4) | See §6 — **CBZ + ComicInfo.xml only**; comic-details UX; 6.5 library rollup optional |
+| REQ-6.5 | Low / future | Library housekeeping rollup for CBZ metadata | **Backlog** | Optional series-level summary on housekeeping page |
+| REQ-UX | Low | **Housekeeping UI parity** with post–v0.11.0 Manage Comics styling | **Backlog** | See §UX — cosmetic; not blocking |
 
 *Status: Backlog | In progress | Done | Dropped. Link PR/commit when done.*
 
@@ -85,14 +89,20 @@ with obvious definitions for `all_pass` and each `*_fail` from the JSON row. Unc
 
 ---
 
-## §3 — Pagination (REQ-3)
+## §3 — Pagination (REQ-3) **done**
 
-- **Reuse DataTables** — same as Manage Comics: “Previous/Next” + numeric pages, `lengthMenu` for page size, `info` string **“Showing _START_ to _END_ of _TOTAL_ results”** (tweak to **items** if you prefer).
-- **Page sizes:** 25 (default), 50, 100, 200, **All** — match or extend `managecomics` (`lengthMenu` there is `10, 25, 50, All`; we’ll set housekeeping’s defaults per your spec).
-- **Top and bottom:** Use `sDom` (or DataTables 1.10+ `dom` option) to place `l` (length) and `p` (pagination) in both top and bottom wrappers — **verify** the exact `dom` string against one existing page you like (e.g. manage comics uses `sDom: '<"clear"f><"clear"lp>...<"clear"ip>'`).
-- **Config:** **`stateSave: true`** for housekeeping (same idea as Manage Comics: remembers sort, page length, and similar per browser).
+**Status (2026-09-01):** Delivered incidentally with **REQ-1.1** DataTables init in `housekeeping.html`. Compared to `managecomics.html` (post–v0.11.0):
 
-**Dependency:** Pagination + “showing X–Y of Z” is largely **satisfied by REQ-1** if DataTables is introduced first; otherwise REQ-3 is mostly wiring and UX polish.
+| Requirement | Housekeeping | Manage Comics | Match? |
+|-------------|--------------|---------------|--------|
+| Top + bottom controls (`sDom`) | `'<"clear"f><"clear"lp>…<"clear"ip>'` | Same | Yes |
+| “Showing _START_ to _END_ of _TOTAL_ results” | `language.info` | Same | Yes |
+| Default page length | 25 | 25 | Yes |
+| `stateSave` | true | true | Yes |
+| `pagingType` | `simple_numbers` | `simple_numbers` | Yes |
+| `lengthMenu` | 10, 25, 50, All | 10, 25, 50, 100, 200, 500, All | Partial |
+
+**Optional polish (not blocking):** add 100 / 200 / 500 to housekeeping `lengthMenu` when aligning with Manage Comics norms. Original spec mentioned 25/50/100/200/All without 10 — current UI is fine.
 
 ---
 
@@ -135,14 +145,90 @@ with obvious definitions for `all_pass` and each `*_fail` from the JSON row. Unc
 
 ---
 
+## §6 — CBZ ComicInfo validation (REQ-6) **done (6.1–6.4)**
+
+**Problem:** Many CBZs were tagged outside Mylar (ComicTagger, Komga export, manual edits). They pass today’s **issue files** check (`.cbz` + rename match) and may contain ComicInfo, but it is unclear whether tags are **Mylar-authored** or **misaligned** with the `issues` / `comics` rows. A full-library **MetaTag** refresh is impractical due to **Comic Vine API rate limits**.
+
+**What “metadata check” means in library housekeeping (unchanged):** `_metadata_pass()` in `contrib/mylar_housekeeping/audit.py` only validates **directory sidecars** when enabled in config (`series.json`, `cvinfo`, `cover.jpg`, `folder.jpg`). It does **not** open CBZs. CBZ validation is **on-demand per series** on comic details (see below).
+
+**Format scope (decision):** Audit and compare logic applies **only to `.cbz` archives that contain `ComicInfo.xml`**. **CBR, CB7, and other formats are skipped** — ComicInfo is not reliably readable/writable in those paths without conversion.
+
+### Implemented approach (no CV calls in audit path)
+
+**REQ-6.1 — Mylar metatag stamp (in-file, not SQLite)**
+
+- On **successful** ComicTagger completion in `cmtagmylar.run`, append or replace token `[MylarMetaTagged:ISO8601Z]` in `ComicInfo.xml` **`Notes`** inside the CBZ (`apply_mylar_metatag_stamp`).
+- **CBZ only**; no schema migration.
+- Pre-existing / externally tagged files lack the stamp until metatagged again by Mylar.
+
+**REQ-6.2 — Compare helper (`contrib/mylar_housekeeping/cbz_metadata.py`)**
+
+- `read_comicinfo_from_cbz`, `compare_cbz_metadata`, `resolve_issue_filepath`.
+- **CBZ + ComicInfo.xml only**; returns `skipped_non_cbz` for other extensions.
+- Compare ComicInfo to DB **without** Comic Vine:
+
+  | ComicInfo field | Compare to | Notes |
+  |-----------------|------------|-------|
+  | `Notes` — `[MylarMetaTagged:…]` | — | Hard fail if missing (never Mylar-tagged) |
+  | `Notes` (Issue ID / CVDB) | `issues.IssueID` | Hard fail on mismatch |
+  | `Series` | `comics.ComicName` | Normalized; hard fail on mismatch |
+  | `Number` | `Issue_Number` | Normalized; hard fail on mismatch |
+  | `Title` | `IssueName` | **Warning only** |
+
+- Outcomes: `ok` | `skipped_non_cbz` | `no_comicinfo` | `never_mylar_tagged` | `wrong_issue_id` | `field_mismatch` | `missing_file`.
+
+**REQ-6.3 — Series audit endpoint + UI**
+
+- `webserve.housekeepingSeriesMetadataAudit(ComicID)` → `audit_series_cbz_metadata` (same status exclusions as issue-files audit).
+- Comic details menu: **Audit CBZ Metadata** — runs audit, stores results in `localStorage` (`mylar_cbz_audit_v1_{ComicID}`), refreshes issue tables.
+- **No CBZ reads on comic details page load.**
+
+**REQ-6.4 — Issue icon + popup**
+
+- Downloaded/archived **CBZ** rows: blue `issueinfo` icon; **`issueinfo_red.png`** when last audit failed.
+- **CBR** keeps orange icon (audit N/A).
+- `IssueInfo` JSON adds `metadata_audit` when filepath is `.cbz` (compare on popup open only).
+
+**REQ-6.5 — Library housekeeping rollup (optional, backlog)**
+
+- Future: series-level CBZ metadata summary on housekeeping page (would still avoid full-library pass on every page load; likely cached or user-triggered).
+
+### Dependencies and risks
+
+- **Performance:** Per-series audit only; library-wide CBZ reads deferred to REQ-6.5 / REQ-4 if ever added.
+- **External tags:** Valid ComicInfo may still fail **provenance** (no Mylar stamp) — intentional; user can selective metatag.
+- **False positives:** `Title` warns only; hard fails prefer **Issue ID in Notes** and series/number.
+
+---
+
+## §UX — Housekeeping styling parity (REQ-UX) **backlog**
+
+Upstream **v0.11.0** refreshed Manage Comics/Issues (`managecomics.css`, button action rows, confirm dialog, selected counter). Housekeeping intentionally kept the **pre-refactor** DataTables + checkbox filter pattern (still valid).
+
+**Proposed alignment (cosmetic, low priority):**
+
+| Area | Current | Align to |
+|------|---------|----------|
+| Control row | Fieldset + plain buttons “Run audit” / “Clear saved” | Optional `managecomics.css` button styling; keep actions audit-specific (no bulk comic select) |
+| Filter bar | Comic-details `Downloaded` / `Wanted` chips | Keep — matches issue tables better than manage action buttons |
+| Table chrome | `data_table.css` only | Already shared |
+| Search label | `"Filter:"` | Manage Comics uses empty search label — minor consistency tweak |
+| `lengthMenu` | 10/25/50/All | Add 100/200/500 (REQ-3 polish) |
+
+**Do not copy** bulk-action confirm UX unless housekeeping gains multi-select series actions (out of scope today).
+
+---
+
 ## Suggested order of work (one theme per commit / PR when possible)
 
 1. **Project doc** (this file) + **REQ-1.1** — DataTables init, sortable columns, non-sortable others, re-init after audit JSON load.
 2. **REQ-1.2** — Filter row, CSS, custom filter + counts, test multi-fail rows.
 3. **REQ-2** — Persist + load + clear; wire `housekeeping` + optional endpoint.
-4. **REQ-3** — `lengthMenu` 25/50/100/200/All, top+bottom `dom` parity with chosen reference page, info string.
+4. **REQ-3** — ~~pagination~~ **done** (REQ-1.1); optional `lengthMenu` expansion only.
 5. **REQ-4** — Document findings; code only if approved.
 6. **REQ-5** — `folder_create` effective type = `Corrected_Type` or `Type`; test rename + collision cases.
+7. ~~**REQ-6.1–6.4**~~ — CBZ metatag stamp + compare + comic-details audit UX (see §6). **REQ-6.5** library rollup optional.
+8. **REQ-UX** — optional Manage Comics CSS/button polish.
 
 (If you prefer **persistence before filters** to avoid re-filtering huge lists, swap 2 and 3.)
 
@@ -157,6 +243,9 @@ with obvious definitions for `all_pass` and each `*_fail` from the JSON row. Unc
 | DataTables `stateSave` | **Yes** for housekeeping. |
 | REQ-2 cache | **`localStorage`**, for upstream alignment and low criticality. |
 | Per-label vs whole-bar filter | **Required:** per-label show/hide when that category’s count is &gt; 0. **Not required (revert 2026-04-23):** hide the **entire** filter bar when there are no series-level rows. |
+| REQ-6 provenance stamp | **In-CBZ** `ComicInfo.xml` **`Notes`**: `[MylarMetaTagged:ISO8601Z]` — **not** a SQLite column. |
+| REQ-6 format scope | **CBZ + ComicInfo.xml only**; CBR/other formats skipped (no audit/compare). |
+| REQ-6 UX scope | **Comic details** per-series audit + issue icons/popup; **not** full-library CBZ pass on housekeeping page load (6.5 optional later). |
 
 ---
 
@@ -176,6 +265,8 @@ with obvious definitions for `all_pass` and each `*_fail` from the JSON row. Unc
 | 2026-04-28 | — | **REQ-5** backlog: Rename folder / `folder_create` should use **Force-Type** (`Corrected_Type`) for `$Type`; see §5. |
 | 2026-06-27 | — | Merged upstream **v0.10.0** into `ghcr-build`; no housekeeping code conflicts; smoke-test after deploy (audit, filters, localStorage, Rename Folder). |
 | 2026-09-01 | — | Merged upstream **v0.11.0** into `ghcr-build`; `mylar/filers.py` and `mylar/webserve.py` auto-merged (fork path-collapse + upstream Print `$Type` dedup; housekeeping endpoints retained). Smoke-test after deploy. |
+| 2026-09-01 | — | **REQ-3** marked **Done** (pagination already in DataTables init); **REQ-6** CBZ ComicInfo validation backlog added (§6); **REQ-UX** styling notes (§UX). |
+| 2026-09-01 | — | **REQ-6.1–6.4:** CBZ-only ComicInfo audit — Notes stamp on metatag (`cbz_metadata.py`, `cmtagmylar.py`); `housekeepingSeriesMetadataAudit`; comic details audit button, icon tint, `IssueInfo` metadata block. |
 
 *Agents: add a row for each merged change affecting this feature.*
 

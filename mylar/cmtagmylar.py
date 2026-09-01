@@ -342,6 +342,17 @@ def run(dirName, nzbName=None, issueid=None, comversion=None, manual=None, filen
         if mylar.CONFIG.CBR2CBZ_ONLY and initial_ctrun == False:
             break
 
+    if filepath and str(filepath).lower().endswith('.cbz') and os.path.isfile(filepath):
+        try:
+            _contrib = os.path.join(mylar.PROG_DIR, 'contrib')
+            if _contrib not in sys.path:
+                sys.path.insert(0, _contrib)
+            from mylar_housekeeping.cbz_metadata import apply_mylar_metatag_stamp
+            if apply_mylar_metatag_stamp(filepath):
+                logger.fdebug('%s[COMIC-TAGGER] Mylar metatag stamp applied to %s' % (module, os.path.basename(filepath)))
+        except Exception as e:
+            logger.warn('%s[COMIC-TAGGER] Could not apply Mylar metatag stamp: %s' % (module, e))
+
     return filepath
 
 

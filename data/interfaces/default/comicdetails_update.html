@@ -37,6 +37,7 @@
                         %if any([mylar.CONFIG.ENABLE_META, mylar.CONFIG.CBR2CBZ_ONLY]):
                             <a id="menu_link_refresh" href="#" title="perform metatagging on each Downloaded issue" onclick="group_metatag(${comic['ComicID']})">Manual MetaTagging</a>
                         %endif
+                        <a id="menu_link_cbz_audit" href="#" title="Check CBZ ComicInfo vs Mylar (no Comic Vine calls)" onclick="hkRunCbzMetadataAudit(${comic['ComicID']}); return false;">Audit CBZ Metadata</a>
 
                         %if comic['Status'] == 'Paused':
                                 <a id="menu_link_resume" href="#" onclick="doAjaxCall('resumeSeries?ComicID=${comic['ComicID']}',$(this),true);reload_tabs();" data-success="${comic['ComicName']} resumed">Resume Comic</a>
@@ -604,8 +605,107 @@
         }
         </style>
         <script>
+        var hkCbzAudit = {};
+        function hkCbzAuditStorageKey() {
+            var cid = document.getElementById('ComicID');
+            return 'mylar_cbz_audit_v1_' + (cid ? cid.value : '');
+        }
+        function hkRestoreCbzAuditFromStorage() {
+            try {
+                var raw = localStorage.getItem(hkCbzAuditStorageKey());
+                if (raw) {
+                    var o = JSON.parse(raw);
+                    if (o && o.issues) {
+                        hkCbzAudit = o.issues;
+                    }
+                }
+            } catch (e) {}
+        }
+        function hkSaveCbzAuditToStorage() {
+            try {
+                localStorage.setItem(hkCbzAuditStorageKey(), JSON.stringify({
+                    v: 1,
+                    ts: new Date().toISOString(),
+                    issues: hkCbzAudit
+                }));
+            } catch (e) {}
+        }
+        function hkFormatMylarTaggedDate(iso) {
+            if (!iso) {
+                return '';
+            }
+            var m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+            if (m) {
+                return m[3] + '/' + m[2] + '/' + m[1];
+            }
+            return iso;
+        }
+        function hkRedrawIssueTables() {
+            if ($.fn.dataTable && $.fn.dataTable.isDataTable('#issue_table')) {
+                $('#issue_table').DataTable().draw(false);
+            }
+            if ($.fn.dataTable && $.fn.dataTable.isDataTable('#annual_table')) {
+                $('#annual_table').DataTable().draw(false);
+            }
+        }
+        var hkLastMetaIssueId = null;
+        function hkRefreshIssueAudit(issueid, refreshPopup) {
+            $.getJSON('IssueInfo', { issueid: issueid }, function(obj) {
+                if (obj.status !== 'success' || !obj.metadata || !obj.metadata.metadata_audit) {
+                    return;
+                }
+                hkCbzAudit[String(issueid)] = obj.metadata.metadata_audit;
+                hkSaveCbzAuditToStorage();
+                hkRedrawIssueTables();
+                if (refreshPopup && hkLastMetaIssueId === String(issueid) && $('#issue-box').is(':visible')) {
+                    runMetaIssue(issueid);
+                }
+            });
+        }
+        function hkIssueInfoImg(full) {
+            var issueimg = '<img src="images/issueinfo_grey.png" height="25" width="25" title="Retrieve Issue Details" class="highqual" style="margin:2px 1px 3px 3px;" />';
+            var st = full[3];
+            var fn = full[5];
+            var iid = String(full[4]);
+            if ((st == 'Downloaded' || st == 'Archived') && fn) {
+                if (fn.toLowerCase().indexOf('.cbz') >= 0) {
+                    var audit = hkCbzAudit[iid];
+                    var title = 'View CBZ Issue Details';
+                    var iconSrc = 'images/issueinfo_blue.png';
+                    if (audit && audit.ok === false) {
+                        title = (audit.errors && audit.errors.length) ? audit.errors.join('; ') : 'CBZ metadata issue';
+                        iconSrc = 'images/issueinfo_red.png';
+                    }
+                    issueimg = '<img src="' + iconSrc + '" height="25" width="25" title="' + title.replace(/"/g, '&quot;') + '" class="highqual" style="margin:2px 1px 3px 3px;" />';
+                } else if (fn.toLowerCase().indexOf('.cbr') >= 0) {
+                    issueimg = '<img src="images/issueinfo_orange.png" height="25" width="25" title="View CBR Issue Details (CBZ audit N/A)" class="highqual" style="margin:2px 1px 3px 3px;" />';
+                }
+            }
+            return issueimg;
+        }
+        function hkRunCbzMetadataAudit(comicid) {
+            $('#ajaxMsg').html("<div class='msg'><span class='ui-icon ui-icon-check'></span>Running CBZ metadata audit...</div>");
+            $.getJSON('housekeepingSeriesMetadataAudit', { ComicID: comicid }, function(data) {
+                if (data.status === 'success') {
+                    hkCbzAudit = data.issues || {};
+                    hkSaveCbzAuditToStorage();
+                    hkRedrawIssueTables();
+                    $('#ajaxMsg').html("<div class='msg'><span class='ui-icon ui-icon-check'></span>" + (data.message || 'Audit complete.') + "</div>");
+                    $('#ajaxMsg').addClass('success').fadeIn().delay(4000).fadeOut();
+                } else {
+                    $('#ajaxMsg').html("<div class='msg'><span class='ui-icon ui-icon-alert'></span>" + (data.message || 'Audit failed.') + "</div>");
+                    $('#ajaxMsg').addClass('error').fadeIn().delay(4000).fadeOut();
+                }
+            }).fail(function(xhr) {
+                $('#ajaxMsg').html("<div class='msg'><span class='ui-icon ui-icon-alert'></span>Audit request failed.</div>");
+                $('#ajaxMsg').addClass('error').fadeIn().delay(4000).fadeOut();
+            });
+        }
+        </script>
+        <script>
         var collapsedGroups = {};
         $(document).ready(function() {
+            hkRestoreCbzAuditFromStorage();
             $("#jeditable-activate").click(function() {
                $(this).prev().click();
                $('.description_edit').trigger('custom_event');
@@ -1198,11 +1298,12 @@
                        alert('ERROR'+data.responseText);
                      },
               })).done(function(data) {
-                 //reload_tables();
+                 hkRefreshIssueAudit(issueid, true);
               });
         }
 
         function runMetaIssue(issueid) {
+              hkLastMetaIssueId = String(issueid);
               $.ajax({
                  type: "GET",
                  url: "IssueInfo",
@@ -1273,7 +1374,35 @@
                            }
                            desc_line += '</tr>';
                        }
-                       desc_line += '</table>'; 
+                       if (obj_meta['metadata_audit']){
+                           var ma = obj_meta['metadata_audit'];
+                           var taggedVal = '';
+                           var issuesVal = '';
+                           if (ma.skipped_reason){
+                               issuesVal = ma.skipped_reason;
+                           } else if (ma.status === 'skipped_non_cbz'){
+                               issuesVal = 'N/A (not CBZ)';
+                           } else {
+                               if (ma.mylar_tagged){
+                                   taggedVal = hkFormatMylarTaggedDate(ma.mylar_tagged);
+                               }
+                               var issueParts = [];
+                               if (ma.errors && ma.errors.length){
+                                   issueParts = issueParts.concat(ma.errors);
+                               }
+                               if (ma.warnings && ma.warnings.length){
+                                   issueParts = issueParts.concat(ma.warnings);
+                               }
+                               if (issueParts.length){
+                                   issuesVal = issueParts.join(', ');
+                               }
+                           }
+                           desc_line += '<tr style="background-color:#4D4C4C;border-top: thin solid black;border-bottom: thin solid black;font-size:11px;">';
+                           desc_line += '<td style="text-align:left;margin-left:5px;float:left;">Metadata tagged: '+taggedVal+'</td>';
+                           desc_line += '<td style="text-align:right;margin-right:5px;float:right;">Issues: '+issuesVal+'</td>';
+                           desc_line += '</tr>';
+                       }
+                       desc_line += '</table>';
                    } else {
                         ErrorPNG = 'interfaces/default/images/symbol_exclamation.png';
                         line = '<table width="300"><tr><td>';
@@ -1785,7 +1914,7 @@
                            "targets": [5],
                            "visible": true,
                            "render": function (data,type,full){
-                               issueimg = '<img src="images/issueinfo_grey.png" height="25" width="25" title="Retrieve Issue Details" class="highqual" style="margin:2px 1px 3px 3px;" />';
+                               issueimg = hkIssueInfoImg(full);
                                var displayline = '<a id="manqueueit" name="manqueueit" title="Search for issue" href="#"><img src="images/search.png" height="25" width="25" style="margin:2px 1px 3px 3px;" /></a>';
                                if (full[3] == 'Skipped' || full[3] == 'Ignored'){
                                    displayline += '<a id="queueit" name="queueit" title="Mark issue as Wanted" href="#"><img src="images/wanted_icon.png" height="25" width="25" style="margin:2px 1px 3px 3px;" /></a>';
@@ -1803,11 +1932,7 @@
                                    displayline += '<a id="unqueueit" name="queueit" title="Mark issue as Skipped" href="#"><img src="images/skipped_icon.png" height="25" width="25" style="margin:2px 1px 3px 3px;" /></a>';
                                    displayline += '<a id="failit" name="failit" title="Mark issue as Failed" href="#"><img src="images/failed.png" class="highqual" height="25" width="25" style="margin:2px 1px 3px 3px;" /></a>';
                                    if (full[5]){
-                                        if (full[5].toLowerCase().indexOf('.cbz') >=0){
-                                            issueimg = '<img src="images/issueinfo_blue.png" height="25" width="25" title="View CBZ Issue Details" class="highqual" style="margin:2px 1px 3px 3px;" />';
-                                        } else if (full[5].toLowerCase().indexOf('.cbr') >=0){
-                                            issueimg = '<img src="images/issueinfo_orange.png" height="25" width="25" title="View CBR Issue Details" class="highqual" style="margin:2px 1px 3px 3px;" />';
-                                        }
+                                        issueimg = hkIssueInfoImg(full);
                                    }
                                    if (document.getElementById("meta_enabled").value == 'True' || document.getElementById("meta_cbr2cbz").value == 'True'){
                                        displayline += '<a id="metatag" name="metatag" title="Manually meta-tag issue" href="#"><img src="images/comictagger.png" height="25" width="25" style="margin:2px 1px 3px 3px;" /></a>';
@@ -2007,7 +2132,7 @@
                            "targets": [6],
                            "visible": true,
                            "render": function (data,type,full){
-                               issueimg = '<img src="images/issueinfo_grey.png" height="25" width="25" title="Retrieve Issue Details" class="highqual" style="margin:2px 1px 3px 3px;" />';
+                               issueimg = hkIssueInfoImg(full);
                                var displayline = '<a id="amanqueueit" name="amanqueueit" title="Search for issue" href="#"><img src="images/search.png" height="25" width="25" style="margin:2px 1px 3px 3px;" /></a>';
                                if (full[3] == 'Skipped' || full[3] == 'Ignored'){
                                    displayline += '<a id="aqueueit" name="aqueueit" title="Mark issue as Wanted" href="#"><img src="images/wanted_icon.png" height="25" width="25" style="margin:2px 1px 3px 3px;" /></a>';
@@ -2022,11 +2147,7 @@
                                    displayline += '<a id="aunqueueit" name="aqueueit" title="Mark issue as Skipped" href="#"><img src="images/skipped_icon.png" height="25" width="25" style="margin:2px 1px 3px 3px;" /></a>';
                                    displayline += '<a id="afailit" name="afailit" title="Mark issue as Failed" href="#"><img src="images/failed.png" class="highqual" height="25" width="25" style="margin:2px 1px 3px 3px;" /></a>';
                                    if (full[5]){
-                                        if (full[5].toLowerCase().indexOf('.cbz') >=0){
-                                            issueimg = '<img src="images/issueinfo_blue.png" height="25" width="25" title="View CBZ Issue Details" class="highqual" style="margin:2px 1px 3px 3px;" />';
-                                        } else if (full[5].toLowerCase().indexOf('.cbr') >=0){
-                                            issueimg = '<img src="images/issueinfo_orange.png" height="25" width="25" title="View CBR Issue Details" class="highqual" style="margin:2px 1px 3px 3px;" />';
-                                        }
+                                        issueimg = hkIssueInfoImg(full);
                                    }
                                    if (document.getElementById("meta_enabled").value == 'True' || document.getElementById("meta_cbr2cbz").value == 'True'){
                                        displayline += '<a id="ametatag" name="ametatag" title="Manually meta-tag issue" href="#"><img src="images/comictagger.png" height="25" width="25" style="margin:2px 1px 3px 3px;" /></a>';

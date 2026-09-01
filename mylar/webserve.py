@@ -4508,6 +4508,43 @@ class WebInterface(object):
 
     housekeepingAudit.exposed = True
 
+    def housekeepingSeriesMetadataAudit(self, ComicID=None):
+        """CBZ ComicInfo audit for one series (REQ-6). CBZ + ComicInfo.xml only."""
+        if not ComicID or str(ComicID).strip() in ("", "None"):
+            return json.dumps({"status": "failure", "message": "ComicID required."})
+        try:
+            import sys
+
+            _contrib = os.path.join(mylar.PROG_DIR, "contrib")
+            if _contrib not in sys.path:
+                sys.path.insert(0, _contrib)
+            from mylar_housekeeping.cbz_metadata import audit_series_cbz_metadata
+
+            result = audit_series_cbz_metadata(str(ComicID).strip())
+            sm = result.get("summary") or {}
+            msg = (
+                "CBZ metadata audit: %s checked, %s passed, %s failed."
+                % (
+                    sm.get("checked_cbz", 0),
+                    sm.get("passed", 0),
+                    sm.get("failed", 0),
+                )
+            )
+            return json.dumps(
+                {
+                    "status": "success",
+                    "message": msg,
+                    "issues": result.get("issues") or {},
+                    "summary": sm,
+                }
+            )
+        except Exception as e:
+            logger.error("[HOUSEKEEPING][CBZ-META] Series audit failed: %s", e)
+            logger.exception("[HOUSEKEEPING][CBZ-META]")
+            return json.dumps({"status": "failure", "message": str(e), "issues": {}})
+
+    housekeepingSeriesMetadataAudit.exposed = True
+
     def housekeepingSeriesRefresh(self, ComicID=None):
         """
         Series housekeeping in one background thread: align series folder on disk
@@ -8360,6 +8397,33 @@ class WebInterface(object):
                           'cover_artists': coverartists,
                           'metadata_source': issuedetails['metadata_source']['metadata_source'],
                           'metadata_type': issuedetails['metadata_source']['metadata_type']}
+            if filepath and str(filepath).lower().endswith('.cbz') and metadata_db:
+                try:
+                    import sys as _sys
+
+                    _contrib = os.path.join(mylar.PROG_DIR, 'contrib')
+                    if _contrib not in _sys.path:
+                        _sys.path.insert(0, _contrib)
+                    from mylar_housekeeping.cbz_metadata import compare_cbz_metadata
+
+                    _comic = myDB.selectone(
+                        'SELECT * FROM comics WHERE ComicID=?',
+                        [metadata_db['ComicID']],
+                    ).fetchone()
+                    _issue = myDB.selectone(
+                        'SELECT * FROM issues WHERE IssueID=?', [issueid]
+                    ).fetchone()
+                    if _issue is None:
+                        _issue = myDB.selectone(
+                            'SELECT * FROM annuals WHERE IssueID=? AND NOT Deleted',
+                            [issueid],
+                        ).fetchone()
+                    if _comic and _issue:
+                        issue_meta['metadata_audit'] = compare_cbz_metadata(
+                            dict(_comic), dict(_issue), filepath
+                        )
+                except Exception as e:
+                    logger.fdebug('[IssueInfo] metadata_audit skipped: %s', e)
         else:
             meta_success = 'failure'
             issue_meta = {'series': seriestitle,

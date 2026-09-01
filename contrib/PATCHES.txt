@@ -7,6 +7,14 @@ Core:
 - contrib/mylar_housekeeping/audit.py — run_library_audit() all series + issues + annuals
 - mylar/filers.py — Windows folder_format: use .replace for / → \\ (fixes re.sub + Py3.13+)
 
+REQ-6 CBZ metadata (comic details; CBZ + ComicInfo.xml only):
+- contrib/mylar_housekeeping/cbz_metadata.py — stamp, compare, series audit
+- mylar/cmtagmylar.py — apply_mylar_metatag_stamp after successful metatag
+- mylar/webserve.py — housekeepingSeriesMetadataAudit; IssueInfo metadata_audit
+- data/interfaces/default/comicdetails_update.html — Audit CBZ Metadata menu, icons, popup block
+- data/images/issueinfo_red.png — CBZ audit-fail issue info icon
+- data/js/script.js — jQuery UI button for menu_link_cbz_audit
+
 Dev (local UI review):
 - devtools/bootstrap_local_db.py, seed_dummy_series.py, run_local.ps1, LOCAL_DEV.txt
 - .gitignore — local-dev-data/, .venv/
