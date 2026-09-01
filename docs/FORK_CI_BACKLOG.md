@@ -14,5 +14,6 @@ Durable **backlog** for infrastructure and release tooling that is **not** tied 
 |------|--------|
 | 2026-04-28 | Created; **CI-1** added (GHCR tagging / version clarity). |
 | 2026-06-27 | Merged upstream **v0.10.0** on `ghcr-build`; CI workflow uses LSIO **`nightly`** ref; sed comments reordered (primary `MylarComics/mylar3` + `commits/nightly`, legacy patterns kept as no-ops). |
+| 2026-09-01 | Merged upstream **v0.11.0** on `ghcr-build`; no CI workflow changes in merge. Rebuild/push GHCR image when ready to deploy. |
 
 *Agents: add a row when this backlog or CI behaviour changes.*
