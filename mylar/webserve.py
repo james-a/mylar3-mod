@@ -1071,7 +1071,7 @@ class WebInterface(object):
         })
     loadAnnualDetails.exposed = True
 
-    def loadSearchResults(self, query=None, iDisplayStart=0, iDisplayLength=25, iSortCol_0='1', sSortDir_0="desc", sSearch="", **kwargs):
+    def loadSearchResults(self, query=None, iDisplayStart=0, iDisplayLength=25, iSortCol_0='1', sSortDir_0="desc", sSearch="", hide_already='0', hide_tpb='0', **kwargs):
 
         logger.fdebug('query: %s' % query)
         if query is None:
@@ -1079,7 +1079,12 @@ class WebInterface(object):
             logger.fdebug('search_query: %s' % query)
 
         myDB = db.DBConnection()
-        queryline = "SELECT * FROM tmp_searches WHERE query_id=?" # ORDER BY %s" % sortcolumn
+        queryline = """
+            SELECT tmp_searches.*, comics.Status AS library_status
+            FROM tmp_searches
+            LEFT JOIN comics ON comics.ComicID = tmp_searches.comicid
+            WHERE tmp_searches.query_id=?
+        """
         db_results = myDB.select(queryline, [query])
         if not db_results:
             try:
@@ -1104,7 +1109,7 @@ class WebInterface(object):
                                 'url': rt['url'],
                                 'type': rt['type'],
                                 'description': rt['description'],
-                                'haveit': rt['haveit'],
+                                'haveit': 'Yes' if rt['haveit'] == 'Adding' and rt['library_status'] == 'Active' else rt['haveit'],
                                 'query_id': rt['query_id']})
 
         if not results:
@@ -1113,6 +1118,7 @@ class WebInterface(object):
                 'iTotalRecords': 0,
                 'aaData': [],
             })
+        total_records = len(results)
         if sSearch == "" or sSearch == None:
             filtered = results[::]
         else:
@@ -1156,6 +1162,13 @@ class WebInterface(object):
                 except Exception as e:
                     pass
 
+        hide_already = str(hide_already).lower() in ('1', 'true', 'yes', 'on')
+        hide_tpb = str(hide_tpb).lower() in ('1', 'true', 'yes', 'on')
+        if hide_already:
+            filtered = [row for row in filtered if row['haveit'] != 'Yes']
+        if hide_tpb:
+            filtered = [row for row in filtered if (row['type'] or '').upper() != 'TPB']
+
         sortcolumn = 'comicname'
         if iSortCol_0 == '1':
             sortcolumn = 'comicname'
@@ -1172,6 +1185,7 @@ class WebInterface(object):
             filtered.sort(key=lambda x: (x[sortcolumn] is None, x[sortcolumn] == '', x[sortcolumn]), reverse=sSortDir_0 == "desc")
 
         logger.info('# of results: %s' % len(filtered))
+        total_display_records = len(filtered)
         iDisplayStart = int(iDisplayStart)
         iDisplayLength = int(iDisplayLength)
         # -1 is used for "All" in DataTables filters
@@ -1180,8 +1194,8 @@ class WebInterface(object):
         rows = [[row['comicid'], row['comicname'], row['publisher'], row['comicyear'], row['issues'], row['deck'], row['url'], row['type'], row['description'], row['haveit'], row['query_id']] for row in filtered]
 
         return json.dumps({
-            'iTotalDisplayRecords': len(results), #len(filtered),
-            'iTotalRecords': len(results),
+            'iTotalDisplayRecords': total_display_records,
+            'iTotalRecords': total_records,
             'aaData': rows,
         })
     loadSearchResults.exposed = True
@@ -1541,6 +1555,8 @@ class WebInterface(object):
                             'Total': comicinfo['ComicIssues']}
                     myDB.upsert( "comics", vals, {'ComicID': comicid} )
 
+        queue_error = None
+        queue_status = 'already_queued'
         if nothread is False:
             watch = []
             #if not any(ext['comicid'] == ComicID for ext in mylar.REFRESH_LIST):
@@ -1558,12 +1574,35 @@ class WebInterface(object):
                 logger.info('[SHIZZLE-WHIZZLE] Now queueing to add %s' % (og_line))
                 try:
                     importer.importer_thread(watch)
-                except Exception:
-                    pass
+                except Exception as e:
+                    queue_error = e
+                    logger.error('Unable to queue %s for addition: %s' % (og_line, e))
+                else:
+                    queue_status = 'queued'
 
             #threading.Thread(target=importer.addComictoDB, args=[comicid, mismatch, None, imported, ogcname]).start()
         else:
             return importer.addComictoDB(comicid, mismatch, None, imported, ogcname)
+
+        if query_id is not None and (calledby is True or calledby == 'True'):
+            if queue_error is not None:
+                return json.dumps({
+                    'status': 'failure',
+                    'message': 'Unable to queue this comic. Please check the logs.'
+                })
+
+            myDB.upsert(
+                'tmp_searches',
+                {'haveit': 'Adding'},
+                {'query_id': query_id, 'comicid': comicid}
+            )
+            return json.dumps({
+                'status': 'success',
+                'state': 'adding',
+                'queue_status': queue_status,
+                'comicid': comicid,
+                'message': 'Comic queued for addition.'
+            })
 
         if calledby is True or calledby == 'True':
            return
@@ -2378,6 +2417,7 @@ class WebInterface(object):
                     logger.fdebug("Marking " + str(IssueID) + " as Skipped")
                 elif action == 'Clear':
                     myDB.action("DELETE FROM snatched WHERE IssueID=?", [IssueID])
+                    continue
                 elif action == 'Failed' and mylar.CONFIG.FAILED_DOWNLOAD_HANDLING:
                     logger.fdebug('Marking [' + comicname + '] : ' + str(IssueID) + ' as Failed. Sending to failed download handler.')
                     failedcomicid = mi['ComicID']
@@ -3203,7 +3243,7 @@ class WebInterface(object):
 
     def pullrecreate(self, weeknumber=None, year=None):
         if mylar.BACKENDSTATUS_WS != 'up':
-            logger.warn('[PULL-LIST] Cannot re-create pull-list as walksoftly is currently offline. Retaining existing pull-data until it\'s back online')
+            logger.warn('[PULL-LIST] Cannot re-create pull-list as the provider backend is currently offline. Retaining existing pull-data until it\'s back online')
             return {'status': 'failure'}
 
         myDB = db.DBConnection()
@@ -4792,7 +4832,7 @@ class WebInterface(object):
                     self.group_metatag(ComicID=cid['ComicID'], threaded=True)
                     cnt+=1
                 logger.info('[MASS BATCH][METATAGGING-FILES] I have completed metatagging files for ' + str(len(ComicID)) + ' series.')
-                mylar.GLOBAL_MESSAGES = {'status': 'success', 'comicid': None, 'tables': 'both', 'message': 'Finished complete series (re)tagging of %s of %s (%s)' % (str(len(ComicID)), comicinfo['ComicName'], comicinfo['ComicYear'])}
+                mylar.GLOBAL_MESSAGES = {'status': 'success', 'comicid': None, 'tables': 'both', 'message': f'Finished complete series (re)tagging of {len(ComicID)} series'}
         else:
             myDB = db.DBConnection()
             cline = myDB.selectone("SELECT ComicName, ComicYear FROM comics WHERE ComicID=?", [ComicID]).fetchone()
@@ -5563,6 +5603,45 @@ class WebInterface(object):
 
                 matcheroso = "no"
 
+                # First try matching by IDs in the existing DB
+                if mylar.CONFIG.ANNUALS_ON:
+                    comics_by_id = myDB.select(
+                        "SELECT c.comicid, comicyear, comiclocation, issueid, True as match_annual \
+                            FROM comics c LEFT JOIN annuals a ON c.comicid=a.comicid \
+                            WHERE a.releasecomicid=? AND a.issueid=? \
+                        UNION SELECT c.comicid, comicyear, comiclocation, issueid, False as match_annual \
+                            FROM comics c LEFT JOIN issues i ON c.comicid=i.comicid \
+                            WHERE c.comicid=? AND i.issueid=?",
+                        [arc['ComicID'], arc['IssueID'], arc['ComicID'], arc['IssueID']]
+                    )
+                else:
+                    comics_by_id = myDB.select(
+                        "SELECT c.comicid, comicyear, comiclocation, issueid, False as match_annual \
+                            FROM comics c LEFT JOIN issues i ON c.comicid=i.comicid \
+                            WHERE c.comicid=? AND i.issueid=?",
+                        [arc['ComicID'], arc['IssueID']]
+                    )
+                if comics_by_id:
+                    if len(comics_by_id) > 1:
+                        # If we find more than one issue, log a warning but continue, using the first result
+                        logger.warn("found more than one copy of issue %s, likely because it is added both via annual integration and independently" % (arc['IssueID']))
+                    comic_by_id = comics_by_id[0]
+                    arc_match.append({
+                        "match_storyarc":          arc['StoryArc'],
+                        "match_annual":            comic_by_id['match_annual'],
+                        "match_name":              arc['ComicName'],
+                        "match_id":                comic_by_id['comicid'],
+                        "match_issueid":           comic_by_id['issueid'],
+                        "match_issue":             arc['IssueNumber'],
+                        "match_issuearcid":        arc['IssueArcID'],
+                        "match_seriesyear":        comic_by_id['comicyear'],
+                        "match_readingorder":      arc['ReadingOrder'],
+                        "match_filedirectory":     comic_by_id['comiclocation'],   #series directory path
+                        "destination_location":    dstloc})                  #path to given storyarc / grab-bag directory
+                    # Since we found the result by id, we can continue to the next issue
+                    continue
+
+                # If we fail to find the comic by ID, fall back to looking by name
                 dyn_name = arc['DynamicComicName']
                 dyn_name = re.sub(r'[\|\s]','', dyn_name.lower()).strip()
                 if mylar.CONFIG.ANNUALS_ON:
@@ -6993,7 +7072,6 @@ class WebInterface(object):
                     "http_root": mylar.CONFIG.HTTP_ROOT,
                     "http_pass": mylar.CONFIG.HTTP_PASSWORD,
                     "instance_name" : mylar.CONFIG.INSTANCE_NAME,
-                    "host_return" : mylar.CONFIG.HOST_RETURN,
                     "enable_https": helpers.checked(mylar.CONFIG.ENABLE_HTTPS),
                     "https_cert": mylar.CONFIG.HTTPS_CERT,
                     "https_key": mylar.CONFIG.HTTPS_KEY,
@@ -7042,6 +7120,7 @@ class WebInterface(object):
                     "torrent_downloader_transmission": helpers.radio(int(mylar.CONFIG.TORRENT_DOWNLOADER), 3),
                     "torrent_downloader_deluge": helpers.radio(int(mylar.CONFIG.TORRENT_DOWNLOADER), 4),
                     "torrent_downloader_qbittorrent": helpers.radio(int(mylar.CONFIG.TORRENT_DOWNLOADER), 5),
+                    "qbittorrent_ignore_ssl": helpers.checked(mylar.CONFIG.QBITTORRENT_IGNORE_SSL),
                     "utorrent_host": mylar.CONFIG.UTORRENT_HOST,
                     "utorrent_username": mylar.CONFIG.UTORRENT_USERNAME,
                     "utorrent_password": mylar.CONFIG.UTORRENT_PASSWORD,
@@ -7575,7 +7654,7 @@ class WebInterface(object):
 
     def configUpdate(self, **kwargs):
         checked_configs = ['enable_https', 'launch_browser', 'backup_on_start', 'keep_html_cache', 'syno_fix', 'auto_update', 'annuals_on', 'api_enabled', 'nzb_startup_search',
-                           'enforce_perms', 'sab_to_mylar', 'torrent_local', 'torrent_seedbox', 'rtorrent_ssl', 'rtorrent_verify', 'rtorrent_startonload',
+                           'enforce_perms', 'sab_to_mylar', 'torrent_local', 'torrent_seedbox', 'rtorrent_ssl', 'rtorrent_verify', 'rtorrent_startonload', 'qbittorrent_ignore_ssl',
                            'enable_torrents', 'enable_rss', 'experimental', 'enable_torrent_search', 'enable_32p', 'enable_torznab',
                            'newznab', 'use_minsize', 'use_maxsize', 'ddump', 'failed_download_handling', 'sab_client_post_processing', 'nzbget_client_post_processing',
                            'failed_auto', 'post_processing', 'enable_check_folder', 'enable_pre_scripts', 'enable_snatch_script', 'enable_extra_scripts',
@@ -8689,10 +8768,14 @@ class WebInterface(object):
                 return 'Successfully validated rTorrent connection'
     testrtorrent.exposed = True
 
-    def testqbit(self, host, username, password):
+    def testqbit(self, host, username, password, ignore_ssl='false'):
+        if ignore_ssl == 'true':
+            ignore_ssl = True
+        elif ignore_ssl == 'false':
+            ignore_ssl = False
         from mylar.torrent.clients import qbittorrent as QbitClient
         qc = QbitClient.TorrentClient()
-        qclient = qc.connect(host, username, password, True)
+        qclient = qc.connect(host, username, password, ignore_ssl=ignore_ssl, test=True)
         if not qclient:
             logger.warn('[qBittorrent] Could not establish connection to %s' % host)
             return 'Error establishing connection to Qbittorrent'

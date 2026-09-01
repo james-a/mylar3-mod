@@ -179,7 +179,6 @@ CURRENT_RELEASE_NAME = None
 LATEST_VERSION = None
 COMMITS_BEHIND = None
 LOCAL_IP = None
-DOWNLOAD_APIKEY = None
 APILOCK = False
 SEARCHLOCK = False
 DDL_LOCK = False
@@ -261,7 +260,7 @@ def initialize(config_file):
                IMPORTBUTTON, IMPORT_FILES, IMPORT_TOTALFILES, IMPORT_CID_COUNT, IMPORT_PARSED_COUNT, IMPORT_FAILURE_COUNT, CHECKENABLED, CVURL, DEMURL, EXPURL, WWTURL, WWT_CF_COOKIEVALUE, \
                DDLPOOL, JD2POOL, NZBPOOL, SNPOOL, PPPOOL, SEARCHPOOL, RETURN_THE_NZBQUEUE, MASS_ADD, ADD_LIST, MASS_REFRESH, REFRESH_QUEUE, SSE_KEY, \
                USE_SABNZBD, USE_NZBGET, USE_BLACKHOLE, USE_RTORRENT, USE_UTORRENT, USE_QBITTORRENT, USE_DELUGE, USE_TRANSMISSION, USE_WATCHDIR, SAB_PARAMS, PUBLISHER_IMPRINTS, \
-               PROG_DIR, DATA_DIR, CMTAGGER_PATH, DOWNLOAD_APIKEY, LOCAL_IP, STATIC_COMICRN_VERSION, STATIC_APC_VERSION, KEYS_32P, AUTHKEY_32P, FEED_32P, FEEDINFO_32P, \
+               PROG_DIR, DATA_DIR, CMTAGGER_PATH, LOCAL_IP, STATIC_COMICRN_VERSION, STATIC_APC_VERSION, KEYS_32P, AUTHKEY_32P, FEED_32P, FEEDINFO_32P, \
                MONITOR_STATUS, SEARCH_STATUS, RSS_STATUS, WEEKLY_STATUS, VERSION_STATUS, UPDATER_STATUS, FORCE_STATUS, DBUPDATE_INTERVAL, DB_BACKFILL, LOG_LANG, LOG_CHARSET, APILOCK, SEARCHLOCK, DDL_LOCK, LOG_LEVEL, \
                MONITOR_SCHEDULER, SEARCH_SCHEDULER, RSS_SCHEDULER, WEEKLY_SCHEDULER, VERSION_SCHEDULER, UPDATER_SCHEDULER, START_UP, \
                SCHED_RSS_LAST, SCHED_WEEKLY_LAST, SCHED_MONITOR_LAST, SCHED_SEARCH_LAST, SCHED_VERSION_LAST, SCHED_DBUPDATE_LAST, COMICINFO, SEARCH_TIER_DATE, \
@@ -311,7 +310,7 @@ def initialize(config_file):
                 s.close()
                 logger.info('Successfully discovered local IP and locking it in as : ' + str(LOCAL_IP))
             except:
-                logger.warn('Unable to determine local IP - this might cause problems when downloading (maybe use host_return in the config.ini)')
+                logger.warn('Unable to determine local IP')
                 LOCAL_IP = CONFIG.HTTP_HOST
 
 
@@ -382,42 +381,36 @@ def initialize(config_file):
         #load in the imprint json here.
         try:
             pub_path = os.path.join(mylar.CONFIG.CACHE_DIR, 'imprints.json')
-            update_imprints = True
             if os.path.exists(pub_path):
                 if os.path.getsize(pub_path) > 0:
                     filetime = max(os.path.getctime(pub_path), os.path.getmtime(pub_path))
                     pub_diff = ((time.time() - filetime) / 3600)
                     if pub_diff > 24:
                         logger.info('[IMPRINT_LOADS] Publisher imprint listing found, but possibly stale ( > 24hrs). Retrieving up-to-date listing')
-                    else:
-                        logger.info('[IMPRINT_LOADS] Loading Publisher imprints data from local file.')
+                        req_pub = requests.get('https://mylarcomics.github.io/publisher_imprints/imprints.json', verify=True)
                         try:
-                            with open(pub_path) as json_file:
-                                PUBLISHER_IMPRINTS = json.load(json_file)
-                        except (OSError, json.JSONDecodeError) as e:
-                            logger.error('Error reading publisher imprint file - %s. Going to retrieve a new listing...' % e)
+                            json_pub = req_pub.json()
+                            with open(pub_path, 'w', encoding='utf-8') as outfile:
+                                json.dump(json_pub, outfile, indent=4, ensure_ascii=False)
+                        except (OSError, json.JSONDecodeError, requests.exceptions.RequestException) as e:
+                            logger.warn('[IMPRINT_LOADS] Unable to retrieve publisher imprints listing at this time. Error: %s' % e)
                         except Exception as e:
-                            logger.error('General error attempting to read file - %s. Going to retrieve a new listing...' % e)
+                            logger.error('Unable to write imprints.json to %s. Error returned: %s' % (pub_path, e))
                         else:
-                            update_imprints = False
+                            logger.fdebug('Successfully written imprints.json file to %s' % pub_path)
+                    
+                    logger.info('[IMPRINT_LOADS] Loading Publisher imprints data from local file.')
+                    try:
+                        with open(pub_path) as json_file:
+                            PUBLISHER_IMPRINTS = json.load(json_file)
+                    except (OSError, json.JSONDecodeError) as e:
+                        logger.error('Error reading publisher imprint file - %s. Going to retrieve a new listing...' % e)
+                    except Exception as e:
+                        logger.error('General error attempting to read file - %s. Going to retrieve a new listing...' % e)
                 else:
                     logger.error('Error reading publisher imprint file - invalid filesize. Going to retrieve a new listing...')
             else:
                 logger.info('[IMPRINT_LOADS] No data for publisher imprints locally. Retrieving up-to-date listing')
-
-            if update_imprints is True:
-                PUBLISHER_IMPRINTS = None
-                req_pub = requests.get('https://mylarcomics.github.io/publisher_imprints/imprints.json', verify=True)
-                try:
-                    json_pub = req_pub.json()
-                    with open(pub_path, 'w', encoding='utf-8') as outfile:
-                        json.dump(json_pub, outfile, indent=4, ensure_ascii=False)
-                except (OSError, json.JSONDecodeError, requests.exceptions.RequestException) as e:
-                    logger.warn('[IMPRINT_LOADS] Unable to retrieve publisher imprints listing at this time. Error: %s' % e)
-                except Exception as e:
-                    logger.error('Unable to write imprints.json to %s. Error returned: %s' % (pub_path, e))
-                else:
-                    logger.fdebug('Successfully written imprints.json file to %s' % pub_path)
 
         except Exception as e:
             logger.warn('[IMPRINT_LOADS] Unable to load publisher -> imprint file. Error: %s' % e)
