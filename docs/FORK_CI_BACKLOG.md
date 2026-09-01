@@ -4,7 +4,20 @@ Durable **backlog** for infrastructure and release tooling that is **not** tied 
 
 | ID | Priority | Description | Status | Notes / resolution |
 |----|----------|-------------|--------|----------------------|
-| **CI-1** | Low–medium | **GHCR image tags and traceability** — make it easy to see **which build** or **when** an image was produced, without relying only on a **mutable** branch tag (e.g. `ghcr-build` moving on every push) | **Backlog** | Workflow: `.github/workflows/build_feature_container.yml`; `docker/metadata-action` (currently default tag set). **When revisited, consider:** (1) Document or standardise on **immutable** tags already produced by defaults (e.g. `type=sha`) vs branch tag. (2) Add **readable** unique tags with `type=raw` (e.g. date + `github.run_id` or `run_number`). (3) **SemVer** from git release tags for named releases. (4) **OCI labels** on the image (`org.opencontainers.image.revision`, `created`, `version`). Full trade-off discussion was in chat (2026-04-28; analysis only, no code). |
+| **CI-1** | Low–medium | **GHCR image tags and traceability** | **Done** | Workflow: `.github/workflows/build_feature_container.yml`. Tags: `ghcr.io/<owner>/mylar3-mod:latest` and `ghcr.io/<owner>/mylar3-mod:<upstreamVersion>-mod.<n>`. Version files: `fork.version` (last merged upstream release, e.g. `0.11.0`), `fork.build` (integer; bump per publish, reset to `1` on upstream version sync). Same scheme as [komga-mod](https://github.com/james-a/komga-mod) `docker-fork.yml`. |
+
+---
+
+## Docker image tags
+
+On each push to `ghcr-build` (and other non-`stable` / non-`nightly` branches), CI publishes:
+
+- **`ghcr.io/james-a/mylar3-mod:latest`** — always the most recent build from the triggering branch
+- **`ghcr.io/james-a/mylar3-mod:0.11.0-mod.1`** — example immutable tag (`fork.version` + `fork.build`)
+
+**Before publishing another image for the same upstream Mylar3 version:** increment `fork.build` (e.g. `1` → `2` → `0.11.0-mod.2`).
+
+**After merging a new upstream release:** set `fork.version` to that release (e.g. `0.12.0`) and reset `fork.build` to `1`.
 
 ---
 
@@ -15,5 +28,6 @@ Durable **backlog** for infrastructure and release tooling that is **not** tied 
 | 2026-04-28 | Created; **CI-1** added (GHCR tagging / version clarity). |
 | 2026-06-27 | Merged upstream **v0.10.0** on `ghcr-build`; CI workflow uses LSIO **`nightly`** ref; sed comments reordered (primary `MylarComics/mylar3` + `commits/nightly`, legacy patterns kept as no-ops). |
 | 2026-09-01 | Merged upstream **v0.11.0** on `ghcr-build`; no CI workflow changes in merge. Rebuild/push GHCR image when ready to deploy. |
+| 2026-09-01 | **CI-1 done:** explicit `latest` + `{fork.version}-mod.{fork.build}` tags; added `fork.version` / `fork.build` (komga-mod pattern). |
 
 *Agents: add a row when this backlog or CI behaviour changes.*

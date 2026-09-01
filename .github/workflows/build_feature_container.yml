@@ -1,14 +1,20 @@
-# Build a LSIO compatible container for dev branches
+# Build a LSIO-compatible container for this fork and push to GHCR.
+#
+# Image tags (same scheme as komga-mod):
+#   ghcr.io/<owner>/mylar3-mod:latest
+#   ghcr.io/<owner>/mylar3-mod:<mylarVersion>-mod.<forkBuild>
+# where <mylarVersion> is in fork.version and <forkBuild> is the integer in fork.build.
+# Bump fork.build when publishing another image for the same upstream version; reset fork.build
+# to 1 and update fork.version after merging a new upstream Mylar3 release.
+
 name: Build & Publish Feature Container
 
-# Run on any branch that isn't a main branch
 on:
     push:
         branches-ignore:
             - 'stable'
             - 'nightly'
 
-# Cancel previous run on this branch if a new push is made
 concurrency:
     group: bpfc-${{ github.ref }}
     cancel-in-progress: true
@@ -28,13 +34,35 @@ jobs:
           attestations: write
           id-token: write
         steps:
+          - name: Checkout fork (version files)
+            uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+            with:
+              path: fork-src
+
+          - name: Set image tags
+            id: ver
+            run: |
+              VER=$(grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' fork-src/fork.version | head -n1)
+              FORK_BUILD=$(grep -E '^[0-9]+$' fork-src/fork.build | head -n1)
+              if [ -z "$VER" ] || [ -z "$FORK_BUILD" ]; then
+                echo "Could not read fork.version or fork.build" >&2
+                exit 1
+              fi
+              TAG="${VER}-mod.${FORK_BUILD}"
+              echo "version=$VER" >> "$GITHUB_OUTPUT"
+              echo "fork_build=$FORK_BUILD" >> "$GITHUB_OUTPUT"
+              echo "image_tag=$TAG" >> "$GITHUB_OUTPUT"
+              echo "Building Mylar3 $VER (fork image tag: $TAG)"
+
           - name: Checkout LSIO mylar3 repository (nightly)
             uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
             with:
               repository: 'linuxserver/docker-mylar3'
               ref: 'nightly'
+              path: docker-mylar3
 
           - name: Edit Dockerfile for current repo/branch
+            working-directory: docker-mylar3
             run: |
               sed -i "/ARG MYLAR3_RELEASE/aENV PYDEVD_DISABLE_FILE_VALIDATION=1" Dockerfile
               # LSIO nightly Dockerfile defaults to MylarComics/mylar3 @ commits/nightly.
@@ -55,23 +83,21 @@ jobs:
               username: ${{ github.actor }}
               password: ${{ secrets.GITHUB_TOKEN }}
 
-          - name: Extract metadata (tags, labels) for Docker
-            id: meta
-            uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
-            with:
-              images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-
           - name: Build and push Docker image
             id: push
             uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
             with:
-              context: .
+              context: docker-mylar3
               push: true
-              tags: ${{ steps.meta.outputs.tags }}
-              labels: ${{ steps.meta.outputs.labels }}
+              tags: |
+                ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+                ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.ver.outputs.image_tag }}
+              labels: |
+                org.opencontainers.image.source=${{ github.repositoryUrl }}
+                org.opencontainers.image.revision=${{ github.sha }}
+                org.opencontainers.image.version=${{ steps.ver.outputs.image_tag }}
 
           - name: Cleanup old untagged GHCR images
             uses: dataaxiom/ghcr-cleanup-action@cd0cdb900b5dbf3a6f2cc869f0dbb0b8211f50c4 # v1.0.16
             with:
               keep-n-untagged: 5
-

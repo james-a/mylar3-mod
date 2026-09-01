@@ -17,3 +17,9 @@ Small, **focused commits** make history readable, `git bisect` useful, and rever
 ## Agents
 
 - Prefer **a commit after each completed requirement** (or each coherent slice), with a message that references the requirement (e.g. `REQ-1.2`). Update `HOUSEKEEPING_ENHANCEMENTS.md` (if present in the tree you commit) in the same change or a small follow commit.
+
+## Container image tags (GHCR)
+
+- **`fork.version`** — upstream Mylar3 release last merged (e.g. `0.11.0`). Update when syncing a new upstream tag.
+- **`fork.build`** — integer incremented before each publish for the **same** `fork.version`; reset to `1` after an upstream version bump.
+- CI (`.github/workflows/build_feature_container.yml`) pushes `ghcr.io/<owner>/mylar3-mod:latest` and `ghcr.io/<owner>/mylar3-mod:<fork.version>-mod.<fork.build>`. See `docs/FORK_CI_BACKLOG.md`.
