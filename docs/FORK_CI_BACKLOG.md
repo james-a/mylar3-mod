@@ -4,7 +4,7 @@ Durable **backlog** for infrastructure and release tooling that is **not** tied 
 
 | ID | Priority | Description | Status | Notes / resolution |
 |----|----------|-------------|--------|----------------------|
-| **CI-1** | Low–medium | **GHCR image tags and traceability** | **Done** | Workflow: `.github/workflows/build_feature_container.yml`. Tags: `ghcr.io/<owner>/mylar3-mod:latest` and `ghcr.io/<owner>/mylar3-mod:<upstreamVersion>-mod.<n>`. Version files: `fork.version` (last merged upstream release, e.g. `0.11.0`), `fork.build` (integer; bump per publish, reset to `1` on upstream version sync). Same scheme as [komga-mod](https://github.com/james-a/komga-mod) `docker-fork.yml`. |
+| **CI-1** | Low–medium | **GHCR image tags and traceability** | **Done** | Workflow: `.github/workflows/build_feature_container.yml`. Tags: `ghcr.io/<owner>/mylar3:latest` and `ghcr.io/<owner>/mylar3:<upstreamVersion>-mod.<n>` (repo stays `mylar3-mod`; image name matches komga-mod pattern). Version files: `fork.version`, `fork.build`. |
 
 ---
 
@@ -12,8 +12,8 @@ Durable **backlog** for infrastructure and release tooling that is **not** tied 
 
 On each push to `ghcr-build` (and other non-`stable` / non-`nightly` branches), CI publishes:
 
-- **`ghcr.io/james-a/mylar3-mod:latest`** — always the most recent build from the triggering branch
-- **`ghcr.io/james-a/mylar3-mod:0.11.0-mod.1`** — example immutable tag (`fork.version` + `fork.build`)
+- **`ghcr.io/james-a/mylar3:latest`** — always the most recent build from the triggering branch
+- **`ghcr.io/james-a/mylar3:0.11.0-mod.2`** — example immutable tag (`fork.version` + `fork.build`)
 
 **Before publishing another image for the same upstream Mylar3 version:** increment `fork.build` (e.g. `1` → `2` → `0.11.0-mod.2`).
 
@@ -29,5 +29,6 @@ On each push to `ghcr-build` (and other non-`stable` / non-`nightly` branches), 
 | 2026-06-27 | Merged upstream **v0.10.0** on `ghcr-build`; CI workflow uses LSIO **`nightly`** ref; sed comments reordered (primary `MylarComics/mylar3` + `commits/nightly`, legacy patterns kept as no-ops). |
 | 2026-09-01 | Merged upstream **v0.11.0** on `ghcr-build`; no CI workflow changes in merge. Rebuild/push GHCR image when ready to deploy. |
 | 2026-09-01 | **CI-1 done:** explicit `latest` + `{fork.version}-mod.{fork.build}` tags; added `fork.version` / `fork.build` (komga-mod pattern). |
+| 2026-09-01 | GHCR package renamed to `ghcr.io/james-a/mylar3` (was `mylar3-mod`); `fork.build` bumped to `2`. Update NAS compose from old image path. |
 
 *Agents: add a row when this backlog or CI behaviour changes.*

@@ -22,4 +22,4 @@ Small, **focused commits** make history readable, `git bisect` useful, and rever
 
 - **`fork.version`** — upstream Mylar3 release last merged (e.g. `0.11.0`). Update when syncing a new upstream tag.
 - **`fork.build`** — integer incremented before each publish for the **same** `fork.version`; reset to `1` after an upstream version bump.
-- CI (`.github/workflows/build_feature_container.yml`) pushes `ghcr.io/<owner>/mylar3-mod:latest` and `ghcr.io/<owner>/mylar3-mod:<fork.version>-mod.<fork.build>`. See `docs/FORK_CI_BACKLOG.md`.
+- CI (`.github/workflows/build_feature_container.yml`) pushes `ghcr.io/<owner>/mylar3:latest` and `ghcr.io/<owner>/mylar3:<fork.version>-mod.<fork.build>`. GitHub repo remains `mylar3-mod`. See `docs/FORK_CI_BACKLOG.md`.

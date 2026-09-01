@@ -1,8 +1,9 @@
 # Build a LSIO-compatible container for this fork and push to GHCR.
 #
 # Image tags (same scheme as komga-mod):
-#   ghcr.io/<owner>/mylar3-mod:latest
-#   ghcr.io/<owner>/mylar3-mod:<mylarVersion>-mod.<forkBuild>
+#   ghcr.io/<owner>/mylar3:latest
+#   ghcr.io/<owner>/mylar3:<mylarVersion>-mod.<forkBuild>
+# Package name matches upstream product (komga-mod pattern); GitHub repo stays mylar3-mod.
 # where <mylarVersion> is in fork.version and <forkBuild> is the integer in fork.build.
 # Bump fork.build when publishing another image for the same upstream version; reset fork.build
 # to 1 and update fork.version after merging a new upstream Mylar3 release.
@@ -21,7 +22,7 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: ${{ github.repository_owner }}/mylar3
 
 jobs:
     push_to_registry:
