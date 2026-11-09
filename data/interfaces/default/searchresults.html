@@ -60,6 +60,17 @@
 
         <div class="table_wrapper" id="search_wrapper">
 
+            %if search_type != 'story_arc':
+            <div id="checkboxControls" name="checkboxControls" style="display:none;">
+                <label for="hide_already" class="checkbox inline">
+                    <input type="checkbox" name="hide_already" id="hide_already" /> Hide already in library
+                </label>
+                <label for="hide_tpb" class="checkbox inline">
+                    <input type="checkbox" name="hide_tpb" id="hide_tpb" /> Hide TPB
+                </label>
+            </div>
+            %endif
+
             <form action="mark_the_results" method="get" id="markresults" name="markresults">
                <div style="position:absolute;float:left;display:none;" id="markresult">Mark selected series as
                     <select name="action" id="mark_results" onChange="mark_the_results()">
@@ -154,31 +165,72 @@
             });
         }
 
-        function addseries(comicid, query_id, com_location, booktype){
+        var addingComics = {};
+
+        function addingComicMarkup(){
+            return '<span class="adding-comic"><span class="ui-icon ui-icon-clock"></span>Adding comic</span>';
+        }
+
+        function markComicAdding(comicid){
+            addingComics[String(comicid)] = true;
+            var table = $('#searchresults_table').DataTable();
+
+            table.rows().every(function(){
+                var rowData = this.data();
+                if (rowData && String(rowData[0]) === String(comicid)) {
+                    rowData[9] = 'Adding';
+                    this.data(rowData);
+                    if (this.child.isShown()) {
+                        this.child.hide();
+                    }
+                    var rowNode = this.node();
+                    $(rowNode).removeClass('shown gradeY');
+                    $('td:last', rowNode).html(addingComicMarkup());
+                }
+            });
+        }
+
+        function addseries(comicid){
             //var markupcoming = document.getElementById("markupcoming").checked;
             //var markall = document.getElementById("markall").checked;
 
-            if(typeof(com_location) === "undefined" || com_location === null){
-                com_location = null;
-            }
-            if(typeof(booktype) === "undefined" || booktype === null){
-                booktype = null;
-            }
+            var query_id = retrieve_searchquery();
+            var location_input = document.getElementById("com_location_" + comicid);
+            var booktype_input = document.getElementById("booktype_" + comicid);
+            var com_location = location_input ? location_input.value : null;
+            var booktype = booktype_input ? booktype_input.value : null;
+
             console.log('com_location:'+com_location);
-            $.when($.ajax({
+
+            if (addingComics[String(comicid)]) {
+                return false;
+            }
+
+            var addLink = $('#addbyid_' + comicid);
+            var spinner = $('#loading_spinner_' + comicid);
+            addLink.attr('aria-disabled', 'true').css('pointer-events', 'none');
+            spinner.show();
+
+            return $.ajax({
                  type: "GET",
                  url: "addbyid",
+                 dataType: "json",
                  data: { comicid: comicid, query_id: query_id, com_location: com_location, booktype: booktype}, //, markupcoming: markupcoming, markall: markall},
-                 success: function(response) {
-                    //obj = JSON.parse(response);
-                 },
-                 error: function(data)
-                     {
-                       alert('ERROR'+data.responseText);
-                     },
-            })).done(function(data) {
-                 //reload_table();
+            }).done(function(response) {
+                 if (response && response.status === 'success') {
+                     markComicAdding(comicid);
+                 } else {
+                     alert('ERROR: ' + ((response && response.message) || 'Unable to queue this comic.'));
+                 }
+            }).fail(function(data) {
+                 alert('ERROR: ' + (data.responseText || 'Unable to queue this comic.'));
+            }).always(function() {
+                 spinner.hide();
+                 if (!addingComics[String(comicid)]) {
+                     addLink.removeAttr('aria-disabled').css('pointer-events', '');
+                 }
             });
+            return false;
         }
 
         // get the click value from the last column (options).
@@ -193,11 +245,11 @@
                 var dataline = $('#searchresults_table').DataTable().row(this.closest('tr')).data();
                 console.log(dataline);
                 console.log('action:'+action);
-                comicid = dataline[0];
-                query_id = retrieve_searchquery(); 
+                var comicid = dataline[0];
+                var query_id = retrieve_searchquery();
                 //query_id = dataline[10];
                 if (action.startsWith('addbyid')) {
-                    addseries(comicid, query_id);
+                    addseries(comicid);
                 } else if (action.startsWith('addbyarcid')) {
                     addstoryarc(comicid, query_id);
                 } else if (action == 'extend_detail'){
@@ -219,7 +271,8 @@
                         // Open this row
                         var cv = editTHEResults(comicid,null,null,query_id).then( response );
                         cv.done(function(data){
-                            dc = JSON.parse(data);
+                            var dc = JSON.parse(data);
+                            var cdescription;
                             const regex = /\\n|\\r\\n|\\n\\r|\\r/g;
                             dc.description.replace(regex, '<br>');
                             if (dc.description.length > 300) {
@@ -232,7 +285,7 @@
                                 }
                             }
 
-                            var dropdown = "<select name='booktype' id='booktype' onChange='update_location("+comicid+",null, booktype)' style='font-size:14px;'>"+
+                            var dropdown = "<select name='booktype' id='booktype_"+comicid+"' style='font-size:14px;'>"+
                                "<option value='Print' selected='selected'>Print</option>" +
                                "<option value='TPB'>TPB</option>" +
                                "<option value='HC'>HC</option>" +
@@ -241,23 +294,32 @@
                                "<option value='Digital'>Digital</option>" +
                                "</select>";
 
-                            location_line = '<input type="text" id="com_location" name="com_location" style="line-height:1.25em;font-size:14px" value="'+dc.comlocation+'" size="60em" onChange="update_location('+comicid+', location, null)" /></a>';
-                            the_line =  '<form name="add_the_series"><table cellpadding="5" cellspacing="0" border="0" style="background-color:#0A0A0A;padding-left:50px;">'+
+                            var location_line = '<input type="text" id="com_location_'+comicid+'" name="com_location" style="line-height:1.25em;font-size:14px" value="'+dc.comlocation+'" size="60em" />';
+                            var the_line =  '<table cellpadding="5" cellspacing="0" border="0" style="background-color:#0A0A0A;padding-left:50px;">'+
                                             '<tr>'+
                                                  '<td width="133"><img id="comicimage" style="float:left;padding-right:10px;padding-bottom:5px;" src="data:image/jpeg;base64,'+dc.image+'" height="200" width="132" /></td>'+
                                                  '<td valign="top"><p>'+cdescription+'</p></td>'+
-                                                 '<td valign="bottom" align="right"><input type="button" name="Add" style="float:right;bottom:20px;" value="Add" onclick="return addseries(comicid, query_id, dc.comlocation, dc.booktype)" />'+
+                                                 '<td valign="bottom" align="right"><input type="button" id="add_series_'+comicid+'" name="Add" style="float:right;bottom:20px;" value="Add" />'+
                                             '</tr>'+
                                             '<tr>'+
                                                   '<td>Comic Location:</td>'+
                                                   '<td>'+location_line+'<span style="float:right;">&nbsp&nbsp&nbsp'+
-                                                  '<input type="button" name="Regenerate" title="Regenerate directory value using new values" value="Regenerate" onclick="return addseries(comicid, query_id, dc.comlocation, dc.booktype)" /></span>'+
+                                                  '<input type="button" id="regenerate_location_'+comicid+'" name="Regenerate" title="Regenerate directory value using new values" value="Regenerate" /></span>'+
                                                   '<span style="float:right;">'+dropdown+'</span></td>'+
                                             '</tr>'+
-                                            '</table></form>';
+                                            '</table>';
                             row.child( the_line ).show();
                             tr.addClass('shown');
-                            drop_the_down(dc.booktype);
+                            drop_the_down(dc.booktype, comicid);
+                            document.getElementById("add_series_" + comicid).onclick = function() {
+                                return addseries(comicid);
+                            };
+                            document.getElementById("regenerate_location_" + comicid).onclick = function() {
+                                return regenerate_location(comicid);
+                            };
+                            document.getElementById("booktype_" + comicid).onchange = function() {
+                                return regenerate_location(comicid);
+                            };
                             document.getElementById("loading_spinner_"+comicid).style.display = "none";
                         });
                     }
@@ -265,37 +327,21 @@
             }
         });
 
-        function update_location(comicid, comlocation, btype){
-            var location = document.getElementById("com_location");
-            var bktype = document.getElementById("booktype");
-            var booktype = bktype.options[bktype.selectedIndex];
+        function regenerate_location(comicid){
+            var location = document.getElementById("com_location_" + comicid);
+            var bktype = document.getElementById("booktype_" + comicid);
             var query_id = retrieve_searchquery();
-            if (comlocation){
-                cloc = location.value;
-            } else {
-                cloc = null;
-            }
-            if (btype){
-                bt = booktype.text;
-            } else { 
-                bt = null;
-            }
-            //boomers = editTHEResults(comicid, location.value, booktype.text, query_id, true);
-            boomers = editTHEResults(comicid, cloc, bt, query_id, true);
+
+            var boomers = editTHEResults(comicid, null, bktype.value, query_id, true);
             boomers.done(function(data){
-                dc = JSON.parse(data);
-                if (cloc){
-                    location.value = dc.comlocation;
-                }
-                if (btype) {
-                    bktype.text = dc.booktype;
-                    location.value = dc.comlocation;
-                }
+                var dc = JSON.parse(data);
+                location.value = dc.comlocation;
            });
+            return false;
         }
 
-        function drop_the_down(booktype) {
-            var mySelect = document.getElementById("booktype");
+        function drop_the_down(booktype, comicid) {
+            var mySelect = document.getElementById("booktype_" + comicid);
 
             for(var i, j = 0; i = mySelect.options[j]; j++) {
                 if(i.value == booktype) {
@@ -349,6 +395,14 @@
         }
 
         var lastChecked = null;
+
+        function placeSearchFilters(){
+            var checkboxControls = $('#checkboxControls');
+            var filter = $('#searchresults_table_filter');
+            if (checkboxControls.length && filter.length) {
+                checkboxControls.prependTo(filter).css('display', 'inline-flex');
+            }
+        }
 
         function initThisPage(){
                 initActions();
@@ -438,12 +492,15 @@
                                        displayline = '<a id="alreadyhave" name="alreadyhave" href="detailStoryArc?StoryArcID=' + full[0] + '&StoryArcName=' + full[1] + '"><span class="ui-icon ui-icon-arrowreturnthick-1-n"></span>Already in Library</a>';
                                    }
                                } else {
-                                   if (full[9] === "No") {
+                                   if (full[9] === "Yes") {
+                                       delete addingComics[String(full[0])];
+                                       displayline = '<a id="alreadyhave" name="alreadyhave" href="comicDetails?ComicID=' + full[0] + '"><span class="ui-icon ui-icon-arrowreturnthick-1-n"></span>Already in Library</a>';
+                                   } else if (full[9] === "Adding" || addingComics[String(full[0])]) {
+                                       displayline = addingComicMarkup();
+                                   } else {
                                        displayline = '<a id="extend_detail" name="extend_detail" href="#"><span class="ui-icon ui-icon-plus"></span>Edit</a>';
                                        displayline += '<a id="addbyid_'+full[0]+'" name="addbyid" href="#"><span class="ui-icon ui-icon-plus"></span>Add this Comic</a>';
                                        displayline += '<span id="loading_spinner_'+full[0]+'" style="display:none;float:right;"><img src="images/loader_black.gif"  height="20" width="20" alt="loading"/></span>';
-                                   } else {
-                                       displayline = '<a id="alreadyhave" name="alreadyhave" href="comicDetails?ComicID=' + full[0] + '"><span class="ui-icon ui-icon-arrowreturnthick-1-n"></span>Already in Library</a>';
                                    }
                                }
                                return displayline;
@@ -463,17 +520,18 @@
                          "infoFiltered":"(filtered from _MAX_ total issues)"
                     },
                     "rowCallback": function (nRow, aData, iDisplayIndex, iDisplayIndexFull) {
+                        var inLibrary = aData[9] === "Yes";
                         if (aData[7] === "Digital" || aData[7] === "TPB" || aData[7] === "GN" || aData[7] == "HC") {
-                            if (aData[9] === "No") {
-                                $('td', nRow).closest('tr').addClass("gradeZ");
-                            } else {
+                            if (inLibrary) {
                                 $('td', nRow).closest('tr').addClass("gradeH");
+                            } else {
+                                $('td', nRow).closest('tr').addClass("gradeZ");
                             }
                          } else {
-                            if (aData[9] === "No") {
-                                $('td', nRow).closest('tr').addClass("gradeB");
-                            } else {
+                            if (inLibrary) {
                                 $('td', nRow).closest('tr').addClass("gradeH");
+                            } else {
+                                $('td', nRow).closest('tr').addClass("gradeB");
                             }
                          }
                          nRow.children[0].id = 'select';
@@ -489,18 +547,24 @@
                      "drawCallback": function (settings) {
                          // Jump to top of page
                          $('#searchresults_table div.dataTables_scrollBody').scrollTop(pageScrollPos);
+                         placeSearchFilters();
                      },
                      "serverData": function ( sSource, aoData, fnCallback ) {
                                 /* Add some extra data to the sender */
                                 aoData.push({"name": "search_query", "value": retrieve_searchquery() });
+                                aoData.push({"name": "hide_already", "value": $('#hide_already').is(':checked') ? "1" : "0" });
+                                aoData.push({"name": "hide_tpb", "value": $('#hide_tpb').is(':checked') ? "1" : "0" });
                                 $.getJSON(sSource, aoData, function (json) {
                                         fnCallback(json)
                                 });
                      },
                      "fnInitComplete": function(oSettings, json)
                      {
+                         placeSearchFilters();
                      },
                 });
+
+                placeSearchFilters();
 
                 $('#searchresults_table tbody').on('click', 'input[type="checkbox"]', function(e){
                 var chkboxes = Array.from($(":checkbox"));
